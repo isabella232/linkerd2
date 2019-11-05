@@ -129,6 +129,10 @@ export const friendlyTitle = singularOrPluralResource => {
     titleCase = _startCase("stateful set");
   } else if (resource === "trafficsplit") {
     titleCase = _startCase("traffic split");
+  } else if (resource === "cronjob") {
+    titleCase = _startCase("cron job");
+  } else if (resource === "replicaset") {
+    titleCase = _startCase("replica set");
   }
 
   let titles = { singular: titleCase };
@@ -158,7 +162,8 @@ const camelCaseLookUp = {
   "replicationcontroller": "replicationController",
   "statefulset": "statefulSet",
   "trafficsplit": "trafficSplit",
-  "daemonset": "daemonSet"
+  "daemonset": "daemonSet",
+  "cronjob": "cronJob",
 };
 
 export const resourceTypeToCamelCase = resource => camelCaseLookUp[resource] || resource;
@@ -177,7 +182,8 @@ export const shortNameLookup = {
   "statefulset": "sts",
   "trafficsplit": "ts",
   "job": "job",
-  "authority": "au"
+  "authority": "au",
+  "cronjob": "cj",
 };
 
 export const podOwnerLookup = {
@@ -186,6 +192,7 @@ export const podOwnerLookup = {
   "replicationcontroller": "rc",
   "replicaset": "rs",
   "statefulset": "sts",
+  "cronjob": "cj",
 };
 
 export const toShortResourceName = name => shortNameLookup[name] || name;

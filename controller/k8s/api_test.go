@@ -193,6 +193,26 @@ metadata:
 			},
 			{
 				err:       nil,
+				namespace: "my-ns",
+				resType:   k8s.CronJob,
+				name:      "my-cronjob",
+				k8sResResults: []string{`
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: my-cronjob
+  namespace: my-ns`,
+				},
+				k8sResMisc: []string{`
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: my-cronjob
+  namespace: not-my-ns`,
+				},
+			},
+			{
+				err:       nil,
 				namespace: "",
 				resType:   k8s.StatefulSet,
 				name:      "",
@@ -471,6 +491,38 @@ metadata:
 status:
   phase: Running`,
 				},
+			},
+			// Cronjob
+			{
+				err: nil,
+				k8sResInput: `
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: emoji
+  namespace: emojivoto
+  uid: cronjob
+spec:
+  jobTemplate:
+    spec:
+      selector:
+        matchLabels:
+          app: emoji-svc`,
+				k8sResResults: []string{`
+apiVersion: v1
+kind: Pod
+metadata:
+  name: emojivoto-meshed
+  namespace: emojivoto
+  labels:
+    app: emoji-svc
+  ownerReferences:
+  - apiVersion: batch/v1beta1
+    uid: cronjob
+status:
+  phase: Running`,
+				},
+				k8sResMisc: []string{},
 			},
 			// Daemonset
 			{

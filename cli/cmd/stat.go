@@ -224,6 +224,7 @@ type rowStats struct {
 	tcpOpenConnections uint64
 	tcpReadBytes       float64
 	tcpWriteBytes      float64
+	hasRequestData     bool
 }
 
 type row struct {
@@ -246,6 +247,10 @@ var (
 	leafHeader      = "LEAF"
 	weightHeader    = "WEIGHT"
 )
+
+func statHasRequestData(stat *pb.BasicStats) bool {
+	return stat.GetSuccessCount() != 0 || stat.GetFailureCount() != 0 || stat.GetActualSuccessCount() != 0 || stat.GetActualFailureCount() != 0
+}
 
 func writeStatsToBuffer(rows []*pb.StatTable_PodGroup_Row, w *tabwriter.Writer, options *statOptions) {
 	maxNameLength := len(nameHeader)
@@ -310,6 +315,7 @@ func writeStatsToBuffer(rows []*pb.StatTable_PodGroup_Row, w *tabwriter.Writer, 
 				tcpOpenConnections: r.GetTcpStats().GetOpenConnections(),
 				tcpReadBytes:       getByteRate(r.GetTcpStats().GetReadBytesTotal(), r.TimeWindow),
 				tcpWriteBytes:      getByteRate(r.GetTcpStats().GetWriteBytesTotal(), r.TimeWindow),
+				hasRequestData:     statHasRequestData(r.Stats),
 			}
 		}
 		if r.TsStats != nil {
@@ -506,7 +512,7 @@ func printSingleStatTable(stats map[string]*row, resourceTypeLabel, resourceType
 			}...)
 		}
 
-		if stats[key].rowStats != nil {
+		if stats[key].rowStats != nil && stats[key].rowStats.hasRequestData {
 			values = append(values, []interface{}{
 				stats[key].successRate * 100,
 				stats[key].requestRate,

@@ -67,7 +67,8 @@ func parseStatTsRow(out string, expectedRowCount, expectedColumnCount int) (map[
 }
 
 func statTrafficSplit(from string, ns string) (map[string]*statTsRow, error) {
-	cmd := []string{"stat", "ts", "--from", from, "--namespace", ns}
+	time.Sleep(31 * time.Second)
+	cmd := []string{"stat", "ts", "--from", from, "--namespace", ns, "-t", "30s"}
 	stdOut, _, err := TestHelper.LinkerdRun(cmd...)
 	if err != nil {
 		return nil, err

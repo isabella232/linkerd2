@@ -2,17 +2,12 @@ package cmd
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
-	"strings"
-
-	"github.com/linkerd/linkerd2/pkg/config"
-	"github.com/linkerd/linkerd2/pkg/issuercerts"
+	"time"
 
 	pb "github.com/linkerd/linkerd2/controller/gen/config"
-	charts "github.com/linkerd/linkerd2/pkg/charts/linkerd2"
+	"github.com/linkerd/linkerd2/pkg/charts"
 	"github.com/linkerd/linkerd2/pkg/healthcheck"
 	"github.com/linkerd/linkerd2/pkg/k8s"
 	"github.com/linkerd/linkerd2/pkg/tls"
@@ -26,16 +21,14 @@ import (
 )
 
 const (
-	okMessage              = "You're on your way to upgrading Linkerd!"
-	controlPlaneMessage    = "Don't forget to run `linkerd upgrade control-plane`!"
-	visitMessage           = "Visit this URL for further instructions: https://linkerd.io/upgrade/#nextsteps"
-	failMessage            = "For troubleshooting help, visit: https://linkerd.io/upgrade/#troubleshooting\n"
-	trustRootChangeMessage = "Rotating the trust anchors will affect existing proxies\nSee https://linkerd.io/2/tasks/rotating_identity_certificates/ for more information"
+	okMessage           = "You're on your way to upgrading Linkerd!"
+	controlPlaneMessage = "Don't forget to run `linkerd upgrade control-plane`!"
+	visitMessage        = "Visit this URL for further instructions: https://linkerd.io/upgrade/#nextsteps"
+	failMessage         = "For troubleshooting help, visit: https://linkerd.io/upgrade/#troubleshooting\n"
 )
 
 type upgradeOptions struct {
 	manifests string
-	force     bool
 	*installOptions
 
 	verifyTLS func(tls *charts.TLS, service string) error
@@ -63,10 +56,6 @@ func (options *upgradeOptions) upgradeOnlyFlagSet() *pflag.FlagSet {
 	flags.StringVar(
 		&options.manifests, "from-manifests", options.manifests,
 		"Read config from a Linkerd install YAML rather than from Kubernetes",
-	)
-	flags.BoolVar(
-		&options.force, "force", options.force,
-		"Force upgrade operation even when issuer certificate does not work with the roots of all proxies",
 	)
 
 	return flags
@@ -181,7 +170,7 @@ func upgradeRunE(options *upgradeOptions, stage string, flags *pflag.FlagSet) er
 		}
 	}
 
-	values, _, err := options.validateAndBuild(stage, k, flags)
+	values, configs, err := options.validateAndBuild(stage, k, flags)
 	if err != nil {
 		upgradeErrorf("Failed to build upgrade configuration: %s", err)
 	}
@@ -189,15 +178,11 @@ func upgradeRunE(options *upgradeOptions, stage string, flags *pflag.FlagSet) er
 	// rendering to a buffer and printing full contents of buffer after
 	// render is complete, to ensure that okStatus prints separately
 	var buf bytes.Buffer
-	if err = render(&buf, values); err != nil {
+	if err = render(&buf, values, configs); err != nil {
 		upgradeErrorf("Could not render upgrade configuration: %s", err)
 	}
 
 	buf.WriteTo(os.Stdout)
-
-	if options.identityOptions.trustPEMFile != "" {
-		fmt.Fprintf(os.Stderr, "\n%s %s\n", warnStatus, trustRootChangeMessage)
-	}
 
 	fmt.Fprintf(os.Stderr, "\n%s %s\n", okStatus, okMessage)
 	if stage == configStage {
@@ -224,7 +209,7 @@ func (options *upgradeOptions) validateAndBuild(stage string, k kubernetes.Inter
 
 	// If the install config needs to be repaired--either because it did not
 	// exist or because it is missing expected fields, repair it.
-	repairInstall(configs.Install)
+	repairInstall(options.generateUUID, configs.Install)
 
 	// We recorded flags during a prior install. If we haven't overridden the
 	// flag on this upgrade, reset that prior value as if it were specified now.
@@ -251,29 +236,6 @@ func (options *upgradeOptions) validateAndBuild(stage string, k kubernetes.Inter
 		configs.GetGlobal().ClusterDomain = defaultClusterDomain
 	}
 
-	if options.identityOptions.crtPEMFile != "" || options.identityOptions.keyPEMFile != "" {
-
-		if configs.Global.IdentityContext.Scheme == string(corev1.SecretTypeTLS) {
-			return nil, nil, errors.New("cannot update issuer certificates if you are using external cert management solution")
-		}
-
-		if options.identityOptions.crtPEMFile == "" {
-			return nil, nil, errors.New("a certificate file must be specified if a private key is provided")
-		}
-		if options.identityOptions.keyPEMFile == "" {
-			return nil, nil, errors.New("a private key file must be specified if a certificate is provided")
-		}
-		if err := checkFilesExist([]string{options.identityOptions.crtPEMFile, options.identityOptions.keyPEMFile}); err != nil {
-			return nil, nil, err
-		}
-	}
-
-	if options.identityOptions.trustPEMFile != "" {
-		if err := checkFilesExist([]string{options.identityOptions.trustPEMFile}); err != nil {
-			return nil, nil, err
-		}
-	}
-
 	var identity *charts.Identity
 	idctx := configs.GetGlobal().GetIdentityContext()
 	if idctx.GetTrustDomain() == "" || idctx.GetTrustAnchorsPem() == "" {
@@ -281,13 +243,13 @@ func (options *upgradeOptions) validateAndBuild(stage string, k kubernetes.Inter
 		// must be upgrading from a version that didn't support identity, so generate it anew...
 		identity, err = options.identityOptions.genValues()
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, fmt.Errorf("unable to generate issuer credentials: %s", err)
 		}
 		configs.GetGlobal().IdentityContext = toIdentityContext(identity)
 	} else {
-		identity, err = options.fetchIdentityValues(k, idctx)
+		identity, err = fetchIdentityValues(k, idctx)
 		if err != nil {
-			return nil, nil, err
+			return nil, nil, fmt.Errorf("unable to fetch the existing issuer credentials from Kubernetes: %s", err)
 		}
 	}
 
@@ -298,14 +260,6 @@ func (options *upgradeOptions) validateAndBuild(stage string, k kubernetes.Inter
 		return nil, nil, fmt.Errorf("could not build install configuration: %s", err)
 	}
 	values.Identity = identity
-	// we need to do that if we have updated the anchors as the config map json has already been generated
-	if values.Identity.TrustAnchorsPEM != configs.Global.IdentityContext.TrustAnchorsPem {
-		// override the anchors in config
-		configs.Global.IdentityContext.TrustAnchorsPem = values.Identity.TrustAnchorsPEM
-		// rebuild the json config map
-		globalJSON, _, _, _ := config.ToJSON(configs)
-		values.Configs.Global = globalJSON
-	}
 
 	// if exist, re-use the proxy injector, profile validator and tap TLS secrets.
 	// otherwise, let Helm generate them by creating an empty charts.TLS struct here.
@@ -350,9 +304,13 @@ func setFlagsFromInstall(flags *pflag.FlagSet, installFlags []*pb.Install_Flag) 
 	}
 }
 
-func repairInstall(install *pb.Install) {
+func repairInstall(generateUUID func() string, install *pb.Install) {
 	if install == nil {
 		install = &pb.Install{}
+	}
+
+	if install.GetUuid() == "" {
+		install.Uuid = generateUUID()
 	}
 
 	// ALWAYS update the CLI version to the most recent.
@@ -381,38 +339,12 @@ func fetchTLSSecret(k kubernetes.Interface, webhook string, options *upgradeOpti
 	return value, nil
 }
 
-func ensureIssuerCertWorksWithAllProxies(k kubernetes.Interface, cred *tls.Cred) error {
-	meshedPods, err := healthcheck.GetMeshedPodsIdentityData(k, "")
-	var problematicPods []string
-	if err != nil {
-		return err
-	}
-	for _, pod := range meshedPods {
-		roots, err := tls.DecodePEMCertPool(pod.Anchors)
-
-		if roots != nil {
-			err = cred.Verify(roots, "")
-		}
-
-		if err != nil {
-			problematicPods = append(problematicPods, fmt.Sprintf("* %s/%s", pod.Namespace, pod.Name))
-		}
-	}
-
-	if len(problematicPods) > 0 {
-		errorMessageHeader := "You are attempting to use an issuer certificate which does not validate against the trust roots of the following pods:"
-		errorMessageFooter := "These pods do not have the current trust bundle and must be restarted.  Use the --force flag to proceed anyway (this will likely prevent those pods from sending or receiving traffic)."
-		return fmt.Errorf("%s\n\t%s\n%s", errorMessageHeader, strings.Join(problematicPods, "\n\t"), errorMessageFooter)
-	}
-	return nil
-}
-
 // fetchIdentityValue checks the kubernetes API to fetch an existing
 // linkerd identity configuration.
 //
 // This bypasses the public API so that we can access secrets and validate
 // permissions.
-func (options *upgradeOptions) fetchIdentityValues(k kubernetes.Interface, idctx *pb.IdentityContext) (*charts.Identity, error) {
+func fetchIdentityValues(k kubernetes.Interface, idctx *pb.IdentityContext) (*charts.Identity, error) {
 	if idctx == nil {
 		return nil, nil
 	}
@@ -424,93 +356,66 @@ func (options *upgradeOptions) fetchIdentityValues(k kubernetes.Interface, idctx
 		idctx.Scheme = k8s.IdentityIssuerSchemeLinkerd
 	}
 
-	var trustAnchorsPEM string
-	var issuerData *issuercerts.IssuerCertData
-	var err error
-
-	if options.identityOptions.trustPEMFile != "" {
-		trustb, err := ioutil.ReadFile(options.identityOptions.trustPEMFile)
-		if err != nil {
-			return nil, err
-		}
-		trustAnchorsPEM = string(trustb)
-	} else {
-		trustAnchorsPEM = idctx.GetTrustAnchorsPem()
-	}
-
-	updatingIssuerCert := options.identityOptions.crtPEMFile != "" && options.identityOptions.keyPEMFile != ""
-
-	if updatingIssuerCert {
-		issuerData, err = readIssuer(trustAnchorsPEM, options.identityOptions.crtPEMFile, options.identityOptions.keyPEMFile)
-	} else {
-		issuerData, err = fetchIssuer(k, trustAnchorsPEM, idctx.Scheme)
-	}
+	keyPEM, crtPEM, expiry, err := fetchIssuer(k, idctx.GetTrustAnchorsPem(), idctx.Scheme)
 	if err != nil {
 		return nil, err
 	}
 
-	cred, err := issuerData.VerifyAndBuildCreds("")
-	if err != nil {
-		return nil, fmt.Errorf("issuer certificate does not work with the provided roots: %s\nFor more information: https://linkerd.io/2/tasks/rotating_identity_certificates/", err)
-	}
-	issuerData.Expiry = &cred.Crt.Certificate.NotAfter
-
-	if updatingIssuerCert && !options.force {
-		if err := ensureIssuerCertWorksWithAllProxies(k, cred); err != nil {
-			return nil, err
-		}
-	}
-
 	return &charts.Identity{
 		TrustDomain:     idctx.GetTrustDomain(),
-		TrustAnchorsPEM: trustAnchorsPEM,
+		TrustAnchorsPEM: idctx.GetTrustAnchorsPem(),
 		Issuer: &charts.Issuer{
 			Scheme:              idctx.Scheme,
 			ClockSkewAllowance:  idctx.GetClockSkewAllowance().String(),
 			IssuanceLifetime:    idctx.GetIssuanceLifetime().String(),
-			CrtExpiry:           *issuerData.Expiry,
+			CrtExpiry:           expiry,
 			CrtExpiryAnnotation: k8s.IdentityIssuerExpiryAnnotation,
 			TLS: &charts.TLS{
-				KeyPEM: issuerData.IssuerKey,
-				CrtPEM: issuerData.IssuerCrt,
+				KeyPEM: keyPEM,
+				CrtPEM: crtPEM,
 			},
 		},
 	}, nil
 }
 
-func readIssuer(trustPEM, issuerCrtPath, issuerKeyPath string) (*issuercerts.IssuerCertData, error) {
-	key, crt, err := issuercerts.LoadIssuerCrtAndKeyFromFiles(issuerKeyPath, issuerCrtPath)
+func fetchIssuer(k kubernetes.Interface, trustPEM string, scheme string) (string, string, time.Time, error) {
+	crtName := k8s.IdentityIssuerCrtName
+	keyName := k8s.IdentityIssuerKeyName
+
+	roots, err := tls.DecodePEMCertPool(trustPEM)
 	if err != nil {
-		return nil, err
-	}
-	issuerData := &issuercerts.IssuerCertData{
-		TrustAnchors: trustPEM,
-		IssuerCrt:    crt,
-		IssuerKey:    key,
+		return "", "", time.Time{}, err
 	}
 
-	return issuerData, nil
-}
-
-func fetchIssuer(k kubernetes.Interface, trustPEM string, scheme string) (*issuercerts.IssuerCertData, error) {
-	var (
-		issuerData *issuercerts.IssuerCertData
-		err        error
-	)
-	switch scheme {
-	case string(corev1.SecretTypeTLS):
-		issuerData, err = issuercerts.FetchExternalIssuerData(k, controlPlaneNamespace)
-	default:
-		issuerData, err = issuercerts.FetchIssuerData(k, trustPEM, controlPlaneNamespace)
-		if issuerData != nil && issuerData.TrustAnchors != trustPEM {
-			issuerData.TrustAnchors = trustPEM
-		}
-	}
+	secret, err := k.CoreV1().
+		Secrets(controlPlaneNamespace).
+		Get(k8s.IdentityIssuerSecretName, metav1.GetOptions{})
 	if err != nil {
-		return nil, err
+		return "", "", time.Time{}, err
+	}
+	if scheme == string(corev1.SecretTypeTLS) {
+		crtName = corev1.TLSCertKey
+		keyName = corev1.TLSPrivateKeyKey
 	}
 
-	return issuerData, nil
+	keyPEM := string(secret.Data[keyName])
+	key, err := tls.DecodePEMKey(keyPEM)
+	if err != nil {
+		return "", "", time.Time{}, err
+	}
+
+	crtPEM := string(secret.Data[crtName])
+	crt, err := tls.DecodePEMCrt(crtPEM)
+	if err != nil {
+		return "", "", time.Time{}, err
+	}
+
+	cred := &tls.Cred{PrivateKey: key, Crt: *crt}
+	if err = cred.Verify(roots, ""); err != nil {
+		return "", "", time.Time{}, fmt.Errorf("invalid issuer credentials: %s", err)
+	}
+
+	return keyPEM, crtPEM, crt.Certificate.NotAfter, nil
 }
 
 // upgradeErrorf prints the error message and quits the upgrade process

@@ -42,7 +42,6 @@ func Main(args []string) {
 
 	k8sAPI, err := k8s.InitializeAPI(
 		*kubeConfigPath,
-		k8s.CJ,
 		k8s.DS,
 		k8s.SS,
 		k8s.Deploy,

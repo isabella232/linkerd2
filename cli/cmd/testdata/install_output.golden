@@ -3,15 +3,18 @@
 ### Linkerd Namespace
 ###
 ---
-kind: Namespace
 apiVersion: v1
+kind: Namespace
 metadata:
-  name: Namespace
   annotations:
     ProxyInjectAnnotation: ProxyInjectDisabled
+  creationTimestamp: null
   labels:
     LinkerdNamespaceLabel: "true"
     config.linkerd.io/admission-webhooks: disabled
+  name: Namespace
+spec: {}
+status: {}
 ---
 ###
 ### Identity Controller Service RBAC
@@ -28,7 +31,7 @@ rules:
 - apiGroups: ["authentication.k8s.io"]
   resources: ["tokenreviews"]
   verbs: ["create"]
-- apiGroups: ["apps"]
+- apiGroups: ["extensions"]
   resources: ["deployments"]
   verbs: ["get"]
 - apiGroups: [""]
@@ -76,7 +79,7 @@ rules:
   resources: ["daemonsets", "deployments", "replicasets", "statefulsets"]
   verbs: ["list", "get", "watch"]
 - apiGroups: ["extensions", "batch"]
-  resources: ["cronjobs", "jobs"]
+  resources: ["jobs"]
   verbs: ["list" , "get", "watch"]
 - apiGroups: [""]
   resources: ["pods", "endpoints", "services", "replicationcontrollers", "namespaces"]
@@ -127,9 +130,6 @@ metadata:
 rules:
 - apiGroups: ["apps"]
   resources: ["replicasets"]
-  verbs: ["list", "get", "watch"]
-- apiGroups: ["batch"]
-  resources: ["jobs"]
   verbs: ["list", "get", "watch"]
 - apiGroups: [""]
   resources: ["pods", "endpoints", "services"]
@@ -211,86 +211,6 @@ metadata:
 ###
 ### Web RBAC
 ###
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: linkerd-web
-  namespace: Namespace
-  labels:
-    ControllerComponentLabel: web
-    ControllerNamespaceLabel: Namespace
-rules:
-- apiGroups: [""]
-  resources: ["configmaps"]
-  verbs: ["get"]
-  resourceNames: ["linkerd-config"]
-- apiGroups: [""]
-  resources: ["namespaces", "configmaps"]
-  verbs: ["get"]
-- apiGroups: [""]
-  resources: ["serviceaccounts", "pods"]
-  verbs: ["list"]
-- apiGroups: ["apps"]
-  resources: ["replicasets"]
-  verbs: ["list"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: linkerd-web
-  namespace: Namespace
-  labels:
-    ControllerComponentLabel: web
-    ControllerNamespaceLabel: Namespace
-roleRef:
-  kind: Role
-  name: linkerd-web
-  apiGroup: rbac.authorization.k8s.io
-subjects:
-- kind: ServiceAccount
-  name: linkerd-web
-  namespace: Namespace
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: linkerd-Namespace-web-check
-  labels:
-    ControllerComponentLabel: web
-    ControllerNamespaceLabel: Namespace
-rules:
-- apiGroups: ["rbac.authorization.k8s.io"]
-  resources: ["clusterroles", "clusterrolebindings"]
-  verbs: ["list"]
-- apiGroups: ["apiextensions.k8s.io"]
-  resources: ["customresourcedefinitions"]
-  verbs: ["list"]
-- apiGroups: ["admissionregistration.k8s.io"]
-  resources: ["mutatingwebhookconfigurations", "validatingwebhookconfigurations"]
-  verbs: ["list"]
-- apiGroups: ["policy"]
-  resources: ["podsecuritypolicies"]
-  verbs: ["list"]
-- apiGroups: ["linkerd.io"]
-  resources: ["serviceprofiles"]
-  verbs: ["list"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: linkerd-Namespace-web-check
-  labels:
-    ControllerComponentLabel: web
-    ControllerNamespaceLabel: Namespace
-roleRef:
-  kind: ClusterRole
-  name: linkerd-Namespace-web-check
-  apiGroup: rbac.authorization.k8s.io
-subjects:
-- kind: ServiceAccount
-  name: linkerd-web
-  namespace: Namespace
 ---
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
@@ -454,7 +374,7 @@ rules:
   resources: ["deployments", "replicasets", "daemonsets", "statefulsets"]
   verbs: ["list", "get", "watch"]
 - apiGroups: ["extensions", "batch"]
-  resources: ["cronjobs", "jobs"]
+  resources: ["jobs"]
   verbs: ["list", "get", "watch"]
 ---
 kind: ClusterRoleBinding
@@ -632,7 +552,7 @@ rules:
   resources: ["daemonsets", "deployments", "replicasets", "statefulsets"]
   verbs: ["list", "get", "watch"]
 - apiGroups: ["extensions", "batch"]
-  resources: ["cronjobs", "jobs"]
+  resources: ["jobs"]
   verbs: ["list" , "get", "watch"]
 ---
 kind: ClusterRole
@@ -899,9 +819,6 @@ metadata:
   annotations:
     CreatedByAnnotation: CliVersion
   labels:
-    app.kubernetes.io/name: identity
-    app.kubernetes.io/part-of: Linkerd
-    app.kubernetes.io/version: ControllerImageVersion
     ControllerComponentLabel: identity
     ControllerNamespaceLabel: Namespace
   name: linkerd-identity
@@ -1110,15 +1027,31 @@ spec:
     port: 8085
     targetPort: 8085
 ---
+kind: Service
+apiVersion: v1
+metadata:
+  name: linkerd-destination
+  namespace: Namespace
+  labels:
+    ControllerComponentLabel: controller
+    ControllerNamespaceLabel: Namespace
+  annotations:
+    CreatedByAnnotation: CliVersion
+spec:
+  type: ClusterIP
+  selector:
+    ControllerComponentLabel: controller
+  ports:
+  - name: grpc
+    port: 8086
+    targetPort: 8086
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   annotations:
     CreatedByAnnotation: CliVersion
   labels:
-    app.kubernetes.io/name: controller
-    app.kubernetes.io/part-of: Linkerd
-    app.kubernetes.io/version: ControllerImageVersion
     ControllerComponentLabel: controller
     ControllerNamespaceLabel: Namespace
   name: linkerd-controller
@@ -1168,6 +1101,35 @@ spec:
           httpGet:
             path: /ready
             port: 9995
+        securityContext:
+          runAsUser: 2103
+        volumeMounts:
+        - mountPath: /var/run/linkerd/config
+          name: config
+      - args:
+        - destination
+        - -addr=:8086
+        - -controller-namespace=Namespace
+        - -enable-h2-upgrade=true
+        - -log-level=ControllerLogLevel
+        image: ControllerImage:ControllerImageVersion
+        imagePullPolicy: ImagePullPolicy
+        livenessProbe:
+          httpGet:
+            path: /ping
+            port: 9996
+          initialDelaySeconds: 10
+        name: destination
+        ports:
+        - containerPort: 8086
+          name: grpc
+        - containerPort: 9996
+          name: admin-http
+        readinessProbe:
+          failureThreshold: 7
+          httpGet:
+            path: /ready
+            port: 9996
         securityContext:
           runAsUser: 2103
         volumeMounts:
@@ -1331,9 +1293,6 @@ metadata:
   annotations:
     CreatedByAnnotation: CliVersion
   labels:
-    app.kubernetes.io/name: destination
-    app.kubernetes.io/part-of: Linkerd
-    app.kubernetes.io/version: ControllerImageVersion
     ControllerComponentLabel: destination
     ControllerNamespaceLabel: Namespace
   name: linkerd-destination
@@ -1527,9 +1486,6 @@ metadata:
   name: linkerd-heartbeat
   namespace: Namespace
   labels:
-    app.kubernetes.io/name: heartbeat
-    app.kubernetes.io/part-of: Linkerd
-    app.kubernetes.io/version: ControllerImageVersion
     ControllerComponentLabel: heartbeat
     ControllerNamespaceLabel: Namespace
   annotations:
@@ -1594,9 +1550,6 @@ metadata:
   annotations:
     CreatedByAnnotation: CliVersion
   labels:
-    app.kubernetes.io/name: web
-    app.kubernetes.io/part-of: Linkerd
-    app.kubernetes.io/version: ControllerImageVersion
     ControllerComponentLabel: web
     ControllerNamespaceLabel: Namespace
   name: linkerd-web
@@ -1925,9 +1878,6 @@ metadata:
   annotations:
     CreatedByAnnotation: CliVersion
   labels:
-    app.kubernetes.io/name: prometheus
-    app.kubernetes.io/part-of: Linkerd
-    app.kubernetes.io/version: ControllerImageVersion
     ControllerComponentLabel: prometheus
     ControllerNamespaceLabel: Namespace
   name: linkerd-prometheus
@@ -2206,9 +2156,6 @@ metadata:
   annotations:
     CreatedByAnnotation: CliVersion
   labels:
-    app.kubernetes.io/name: grafana
-    app.kubernetes.io/part-of: Linkerd
-    app.kubernetes.io/version: ControllerImageVersion
     ControllerComponentLabel: grafana
     ControllerNamespaceLabel: Namespace
   name: linkerd-grafana
@@ -2408,9 +2355,6 @@ metadata:
   annotations:
     CreatedByAnnotation: CliVersion
   labels:
-    app.kubernetes.io/name: proxy-injector
-    app.kubernetes.io/part-of: Linkerd
-    app.kubernetes.io/version: ControllerImageVersion
     ControllerComponentLabel: proxy-injector
     ControllerNamespaceLabel: Namespace
   name: linkerd-proxy-injector
@@ -2643,9 +2587,6 @@ metadata:
   annotations:
     CreatedByAnnotation: CliVersion
   labels:
-    app.kubernetes.io/name: sp-validator
-    app.kubernetes.io/part-of: Linkerd
-    app.kubernetes.io/version: ControllerImageVersion
     ControllerComponentLabel: sp-validator
     ControllerNamespaceLabel: Namespace
   name: linkerd-sp-validator
@@ -2857,9 +2798,6 @@ metadata:
   annotations:
     CreatedByAnnotation: CliVersion
   labels:
-    app.kubernetes.io/name: tap
-    app.kubernetes.io/part-of: Linkerd
-    app.kubernetes.io/version: ControllerImageVersion
     ControllerComponentLabel: tap
     ControllerNamespaceLabel: Namespace
   name: linkerd-tap
@@ -3048,3 +2986,4 @@ spec:
       - name: tls
         secret:
           secretName: linkerd-tap-tls
+---

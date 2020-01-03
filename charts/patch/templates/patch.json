@@ -1,35 +1,36 @@
-{{ $prefix := .Values.pathPrefix -}}
-[
-  {{- if .Values.addRootAnnotations }}
+{{ with .Values -}}
+{{ $prefix := .PathPrefix -}}
+[    
+  {{- if .AddRootAnnotations }}
   {
     "op": "add",
     "path": "{{$prefix}}/metadata/annotations",
     "value": {}
   },
   {{- end }}
-  {{- range $label, $value := .Values.annotations }}
+  {{- range $label, $value := .Annotations }}
   {
     "op": "add",
     "path": "{{$prefix}}/metadata/annotations/{{$label | replace "/" "~1"}}",
     "value": "{{$value}}"
   },
   {{- end }}
-  {{- if .Values.addRootLabels }}
+  {{- if .AddRootLabels }}
   {
     "op": "add",
     "path": "{{$prefix}}/metadata/labels",
     "value": {}
   },
   {{- end }}
-  {{- range $label, $value := .Values.labels }}
+  {{- range $label, $value := .Labels }}
   {
     "op": "add",
     "path": "{{$prefix}}/metadata/labels/{{$label | replace "/" "~1"}}",
     "value": "{{$value}}"
   },
   {{- end }}
-  {{- if .Values.proxyInit }}
-  {{- if .Values.addRootInitContainers }}
+  {{- if .ProxyInit }}
+  {{- if .AddRootInitContainers }}
   {
     "op": "add",
     "path": "{{$prefix}}/spec/initContainers",
@@ -43,7 +44,7 @@
       {{- include "partials.proxy-init" . | fromYaml | toPrettyJson | nindent 6 }}
   },
   {{- end }}
-  {{- with .Values.debugContainer }}
+  {{- with .DebugContainer }}
   {
     "op": "add",
     "path": "{{$prefix}}/spec/containers/-",
@@ -51,15 +52,15 @@
       {{- include "partials.debug" . | fromYaml | toPrettyJson | nindent 6 }}
   },
   {{- end }}
-  {{- if .Values.proxy }}
-  {{- if .Values.addRootVolumes }}
+  {{- if .Proxy }}
+  {{- if .AddRootVolumes }}
   {
     "op": "add",
     "path": "{{$prefix}}/spec/volumes",
     "value": []
   },
   {{- end }}
-  {{- if not .Values.proxy.disableIdentity -}}
+  {{- if not .Proxy.DisableIdentity -}}
   {
     "op": "add",
     "path": "{{$prefix}}/spec/volumes/-",
@@ -79,3 +80,4 @@
   },
   {{- end }}
 ]
+{{- end -}}

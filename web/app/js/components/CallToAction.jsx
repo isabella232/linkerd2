@@ -13,11 +13,11 @@ const styles = theme => ({
     width: '90%',
   },
   button: {
-    marginRight: theme.spacing(1),
+    marginRight: theme.spacing.unit,
   },
   instructions: {
-    marginTop: theme.spacing(1),
-    marginBottom: theme.spacing(1),
+    marginTop: theme.spacing.unit,
+    marginBottom: theme.spacing.unit,
   },
 });
 

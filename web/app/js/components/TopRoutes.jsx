@@ -1,5 +1,4 @@
-import { StringParam, withQueryParams } from 'use-query-params';
-import { handlePageVisibility, withPageVisibility } from './util/PageVisibility.jsx';
+import { UrlQueryParamTypes, addUrlProps } from 'react-url-query';
 
 import Button from '@material-ui/core/Button';
 import Card from '@material-ui/core/Card';
@@ -20,9 +19,11 @@ import TopRoutesModule from './TopRoutesModule.jsx';
 import Typography from '@material-ui/core/Typography';
 import _get from 'lodash/get';
 import _isEmpty from 'lodash/isEmpty';
+import _mapValues from 'lodash/mapValues';
 import _merge from 'lodash/merge';
 import _pick from 'lodash/pick';
 import _uniq from 'lodash/uniq';
+import _upperFirst from 'lodash/upperFirst';
 import { groupResourcesByNs } from './util/MetricUtils.jsx';
 import { tapResourceTypes } from './util/TapUtils.jsx';
 import { withContext } from './util/AppContext.jsx';
@@ -38,10 +39,9 @@ const topRoutesQueryProps = {
 };
 const topRoutesQueryPropType = PropTypes.shape(topRoutesQueryProps);
 
-let topRoutesQueryConfig = {};
-for (let value in topRoutesQueryProps) {
-  topRoutesQueryConfig[value] = StringParam;
-}
+const urlPropsQueryConfig = _mapValues(topRoutesQueryProps, () => {
+  return { type: UrlQueryParamTypes.string };
+});
 
 const toResourceName = (query, typeKey, nameKey) => {
   return `${query[typeKey] || ""}${!query[nameKey] ? "" : "/"}${query[nameKey] || ""}`;
@@ -49,8 +49,8 @@ const toResourceName = (query, typeKey, nameKey) => {
 
 const styles = theme => ({
   root: {
-    marginTop: theme.spacing(3),
-    marginBottom:theme.spacing(1),
+    marginTop: 3 * theme.spacing.unit,
+    marginBottom:theme.spacing.unit,
   },
   formControl: {
     minWidth: 200,
@@ -62,24 +62,24 @@ class TopRoutes extends React.Component {
       PrefixedLink: PropTypes.func.isRequired,
     }).isRequired,
     classes: PropTypes.shape({}).isRequired,
-    isPageVisible: PropTypes.bool.isRequired,
-    query: topRoutesQueryPropType.isRequired,
-    setQuery: PropTypes.func.isRequired,
+    query: topRoutesQueryPropType,
   }
-
-  constructor(props) {
-    super(props);
-    this.api = this.props.api;
-
-    const query = _merge({
+  static defaultProps = {
+    query: {
       resource_name: '',
       resource_type: '',
       namespace: '',
       to_name: '',
       to_type: '',
       to_namespace: ''
-    }, _pick(props.query, Object.keys(topRoutesQueryProps)));
+    },
+  }
 
+  constructor(props) {
+    super(props);
+    this.api = this.props.api;
+
+    let query = _merge({}, props.query, _pick(this.props, Object.keys(topRoutesQueryProps)));
 
     this.state = {
       query: query,
@@ -96,15 +96,6 @@ class TopRoutes extends React.Component {
   componentDidMount() {
     this._isMounted = true; // https://reactjs.org/blog/2015/12/16/ismounted-antipattern.html
     this.startServerPolling();
-  }
-
-  componentDidUpdate(prevProps) {
-    handlePageVisibility({
-      prevVisibilityState: prevProps.isPageVisible,
-      currentVisibilityState: this.props.isPageVisible,
-      onVisible: () => this.startServerPolling(),
-      onHidden: () => this.stopServerPolling(),
-    });
   }
 
   componentWillUnmount() {
@@ -160,7 +151,6 @@ class TopRoutes extends React.Component {
   stopServerPolling = () => {
     window.clearInterval(this.timerId);
     this.api.cancelCurrentRequests();
-    this.setState({ pendingRequests: false });
   }
 
   handleBtnClick = inProgress => () => {
@@ -169,11 +159,13 @@ class TopRoutes extends React.Component {
     });
   }
 
-  // Each time state.query is updated, this method calls setQuery provided
-  // by useQueryParams HOC to partially update url query params that have
-  // changed
+  // Each time state.query is updated, this method calls the equivalent
+  // onChange method to reflect the update in url query params. These onChange
+  // methods are automatically added to props by react-url-query.
   handleUrlUpdate = query => {
-    this.props.setQuery({ ...query });
+    for (let key in query) {
+      this.props[`onChange${_upperFirst(key)}`](query[key]);
+    }
   }
 
   handleNamespaceSelect = nsKey => e => {
@@ -202,8 +194,8 @@ class TopRoutes extends React.Component {
 
     return (
       <CardContent>
-        <Grid container direction="column" spacing={2}>
-          <Grid item container spacing={4} alignItems="center" justify="flex-start">
+        <Grid container direction="column" spacing={16}>
+          <Grid item container spacing={32} alignItems="center" justify="flex-start">
             <Grid item>
               { this.renderNamespaceDropdown("Namespace", "namespace", "Namespace to query") }
             </Grid>
@@ -233,7 +225,7 @@ class TopRoutes extends React.Component {
             </Grid>
           </Grid>
 
-          <Grid item container spacing={4} alignItems="center" justify="flex-start">
+          <Grid item container spacing={32} alignItems="center" justify="flex-start">
             <Grid item>
               { this.renderNamespaceDropdown("To Namespace", "to_namespace", "Namespece of target resource") }
             </Grid>
@@ -256,7 +248,7 @@ class TopRoutes extends React.Component {
       <FormControl className={classes.formControl}>
         <InputLabel htmlFor={`${key}-dropdown`}>{title}</InputLabel>
         <Select
-          value={this.state.namespaces.includes(this.state.query[key]) ? this.state.query[key] : ""}
+          value={this.state.query[key]}
           onChange={this.handleNamespaceSelect(key)}
           inputProps={{
             name: key,
@@ -302,7 +294,7 @@ class TopRoutes extends React.Component {
       <FormControl className={classes.formControl}>
         <InputLabel htmlFor={`${nameKey}-dropdown`}>{title}</InputLabel>
         <Select
-          value={dropdownOptions.includes(dropdownVal) ? dropdownVal : ""}
+          value={dropdownVal}
           onChange={this.handleResourceSelect(nameKey, typeKey)}
           disabled={_isEmpty(query.namespace)}
           inputProps={{
@@ -332,7 +324,7 @@ class TopRoutes extends React.Component {
           !this.state.error ? null :
           <ErrorBanner message={this.state.error} onHideMessage={() => this.setState({ error: null })} />
         }
-        <Card elevation={3}>
+        <Card>
           { this.renderRoutesQueryForm() }
           {
             emptyQuery ? null :
@@ -348,4 +340,4 @@ class TopRoutes extends React.Component {
   }
 }
 
-export default withPageVisibility(withQueryParams(topRoutesQueryConfig, (withContext(withStyles(styles, { withTheme: true })(TopRoutes)))));
+export default addUrlProps({ urlPropsQueryConfig })(withContext(withStyles(styles, { withTheme: true })(TopRoutes)));

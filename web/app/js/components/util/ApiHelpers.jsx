@@ -77,15 +77,6 @@ const ApiHelpers = (pathPrefix, defaultMetricsWindow = '1m') => {
     return makeCancelable(fetch(path), r => r.json());
   };
 
-  // for getting yaml api results
-  const apiFetchYAML = path => {
-    if (!_isEmpty(pathPrefix)) {
-      path = `${pathPrefix}${path}`;
-    }
-
-    return makeCancelable(fetch(path), r => r.text());
-  };
-
   // for getting non-json results
   const prefixedUrl = path => {
     if (!_isEmpty(pathPrefix)) {
@@ -122,14 +113,6 @@ const ApiHelpers = (pathPrefix, defaultMetricsWindow = '1m') => {
 
   const fetchEdges = (namespace, resourceType) => {
     return apiFetch(edgesPath + "?resource_type=" + resourceType + "&namespace=" + namespace);
-  };
-
-  const fetchCheck = () => {
-    return apiFetch('/api/check');
-  };
-
-  const fetchResourceDefinition = (namespace, resourceType, resourceName) => {
-    return apiFetchYAML(`/api/resource-definition?namespace=${namespace}&resource_type=${resourceType}&resource_name=${resourceName}`);
   };
 
   const getMetricsWindow = () => metricsWindow;
@@ -247,8 +230,6 @@ const ApiHelpers = (pathPrefix, defaultMetricsWindow = '1m') => {
     fetchPods,
     fetchServices,
     fetchEdges,
-    fetchCheck,
-    fetchResourceDefinition,
     getMetricsWindow,
     setMetricsWindow,
     getValidMetricsWindows: () => Object.keys(validMetricsWindows),

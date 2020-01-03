@@ -11,7 +11,6 @@ import (
 	pb "github.com/linkerd/linkerd2/controller/gen/public"
 	"github.com/linkerd/linkerd2/pkg/k8s"
 	profiles "github.com/linkerd/linkerd2/pkg/profiles"
-	"github.com/patrickmn/go-cache"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -28,8 +27,6 @@ type (
 		controllerNamespace string
 		clusterDomain       string
 		grafanaProxy        *grafanaProxy
-		hc                  healthChecker
-		statCache           *cache.Cache
 	}
 )
 

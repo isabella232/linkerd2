@@ -1,6 +1,5 @@
-import { StringParam, withQueryParams } from 'use-query-params';
+import { UrlQueryParamTypes, addUrlProps } from 'react-url-query';
 import { WS_ABNORMAL_CLOSURE, WS_NORMAL_CLOSURE, WS_POLICY_VIOLATION, emptyTapQuery, processTapEvent, setMaxRps, wsCloseCodes } from './util/TapUtils.jsx';
-import { handlePageVisibility, withPageVisibility } from './util/PageVisibility.jsx';
 
 import ErrorBanner from './ErrorBanner.jsx';
 import PropTypes from 'prop-types';
@@ -18,7 +17,7 @@ import { groupResourcesByNs } from './util/MetricUtils.jsx';
 import { withContext } from './util/AppContext.jsx';
 
 const urlPropsQueryConfig = {
-  autostart: StringParam,
+  autostart: { type: UrlQueryParamTypes.string }
 };
 
 class Tap extends React.Component {
@@ -27,7 +26,6 @@ class Tap extends React.Component {
       PrefixedLink: PropTypes.func.isRequired,
     }).isRequired,
     autostart: PropTypes.string,
-    isPageVisible: PropTypes.bool.isRequired,
     pathPrefix: PropTypes.string.isRequired
   }
 
@@ -74,26 +72,6 @@ class Tap extends React.Component {
     }
   }
 
-  componentDidUpdate(prevProps) {
-    handlePageVisibility({
-      prevVisibilityState: prevProps.isPageVisible,
-      currentVisibilityState: this.props.isPageVisible,
-      onVisible: () => {
-        this.startServerPolling();
-        if (this.props.autostart === "true") {
-          this.startTapStreaming();
-        }
-      },
-      onHidden: () => {
-        if (this.ws) {
-          this.ws.close(1000);
-        }
-        this.throttledWebsocketRecvHandler.cancel();
-        this.stopServerPolling();
-      },
-    });
-  }
-
   componentWillUnmount() {
     this._isMounted = false;
     if (this.ws) {
@@ -109,8 +87,7 @@ class Tap extends React.Component {
 
     this.ws.send(JSON.stringify({
       id: "tap-web",
-      ...query,
-      extract: true,
+      ...query
     }));
     this.setState({
       error: null
@@ -204,7 +181,6 @@ class Tap extends React.Component {
   stopServerPolling() {
     window.clearInterval(this.timerId);
     this.api.cancelCurrentRequests();
-    this.setState({ pendingRequests: false });
   }
 
   startTapStreaming() {
@@ -316,7 +292,7 @@ class Tap extends React.Component {
           resourcesByNs={this.state.resourcesByNs}
           authoritiesByNs={this.state.authoritiesByNs}
           updateQuery={this.updateQuery}
-          currentQuery={this.state.query} />
+          query={this.state.query} />
 
         <TapEventTable
           resource={this.state.query.resource}
@@ -326,4 +302,4 @@ class Tap extends React.Component {
   }
 }
 
-export default withPageVisibility(withQueryParams(urlPropsQueryConfig, withContext(Tap)));
+export default addUrlProps({ urlPropsQueryConfig })(withContext(Tap));

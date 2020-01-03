@@ -1,4 +1,5 @@
-{{ if not .Values.disableHeartBeat -}}
+{{ with .Values -}}
+{{ if not .DisableHeartBeat -}}
 ---
 ###
 ### Heartbeat RBAC
@@ -8,9 +9,9 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: linkerd-heartbeat
-  namespace: {{.Values.namespace}}
+  namespace: {{.Namespace}}
   labels:
-    {{.Values.controllerNamespaceLabel}}: {{.Values.namespace}}
+    {{.ControllerNamespaceLabel}}: {{.Namespace}}
 rules:
 - apiGroups: [""]
   resources: ["configmaps"]
@@ -21,9 +22,9 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: linkerd-heartbeat
-  namespace: {{.Values.namespace}}
+  namespace: {{.Namespace}}
   labels:
-    {{.Values.controllerNamespaceLabel}}: {{.Values.namespace}}
+    {{.ControllerNamespaceLabel}}: {{.Namespace}}
 roleRef:
   kind: Role
   name: linkerd-heartbeat
@@ -31,14 +32,15 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: linkerd-heartbeat
-  namespace: {{.Values.namespace}}
+  namespace: {{.Namespace}}
 ---
 kind: ServiceAccount
 apiVersion: v1
 metadata:
   name: linkerd-heartbeat
-  namespace: {{.Values.namespace}}
+  namespace: {{.Namespace}}
   labels:
-    {{.Values.controllerComponentLabel}}: heartbeat
-    {{.Values.controllerNamespaceLabel}}: {{.Values.namespace}}
+    {{.ControllerComponentLabel}}: heartbeat
+    {{.ControllerNamespaceLabel}}: {{.Namespace}}
+{{- end }}
 {{- end }}

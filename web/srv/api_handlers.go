@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"regexp"
-	"strings"
 	"time"
 
 	"github.com/golang/protobuf/jsonpb"
@@ -17,28 +15,15 @@ import (
 	"github.com/julienschmidt/httprouter"
 	"github.com/linkerd/linkerd2/controller/api/util"
 	pb "github.com/linkerd/linkerd2/controller/gen/public"
-	"github.com/linkerd/linkerd2/pkg/healthcheck"
 	"github.com/linkerd/linkerd2/pkg/k8s"
 	"github.com/linkerd/linkerd2/pkg/protohttp"
 	"github.com/linkerd/linkerd2/pkg/tap"
-	"github.com/patrickmn/go-cache"
 	log "github.com/sirupsen/logrus"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/yaml"
 )
 
-const (
-	// Control Frame payload size can be no bigger than 125 bytes. 2 bytes are
-	// reserved for the status code when formatting the message.
-	maxControlFrameMsgSize = 123
-
-	// statExpiration indicates when items in the stat cache expire.
-	statExpiration = 1500 * time.Millisecond
-
-	// statCleanupInterval indicates how often expired items in the stat cache
-	// are cleaned up.
-	statCleanupInterval = 5 * time.Minute
-)
+// Control Frame payload size can be no bigger than 125 bytes. 2 bytes are
+// reserved for the status code when formatting the message.
+const maxControlFrameMsgSize = 123
 
 type (
 	jsonError struct {
@@ -54,14 +39,6 @@ var (
 		ReadBufferSize:  maxMessageSize,
 		WriteBufferSize: maxMessageSize,
 	}
-
-	// Checks whose description matches the following regexp won't be included
-	// in the handleApiCheck output. In the context of the dashboard, some
-	// checks like cli or kubectl versions ones may not be relevant.
-	//
-	// TODO(tegioz): use more reliable way to identify the checks that should
-	// not be displayed in the dashboard (hint anchor is not unique).
-	excludedChecksRE = regexp.MustCompile(`(?i)cli|(?i)kubectl`)
 )
 
 func renderJSONError(w http.ResponseWriter, err error, status int) {
@@ -85,11 +62,6 @@ func renderJSON(w http.ResponseWriter, resp interface{}) {
 func renderJSONPb(w http.ResponseWriter, msg proto.Message) {
 	w.Header().Set("Content-Type", "application/json")
 	pbMarshaler.Marshal(w, msg)
-}
-
-func renderJSONBytes(w http.ResponseWriter, b []byte) {
-	w.Header().Set("Content-Type", "application/json")
-	w.Write(b)
 }
 
 func (h *handler) handleAPIVersion(w http.ResponseWriter, req *http.Request, p httprouter.Params) {
@@ -136,19 +108,6 @@ func (h *handler) handleAPIServices(w http.ResponseWriter, req *http.Request, p 
 }
 
 func (h *handler) handleAPIStat(w http.ResponseWriter, req *http.Request, p httprouter.Params) {
-	// Initialize stat cache if needed
-	if h.statCache == nil {
-		h.statCache = cache.New(statExpiration, statCleanupInterval)
-	}
-
-	// Try to get stat summary from cache using the query as key
-	cachedResultJSON, ok := h.statCache.Get(req.URL.RawQuery)
-	if ok {
-		// Cache hit, render cached json result
-		renderJSONBytes(w, cachedResultJSON.([]byte))
-		return
-	}
-
 	trueStr := fmt.Sprintf("%t", true)
 
 	requestParams := util.StatsSummaryRequestParams{
@@ -185,16 +144,7 @@ func (h *handler) handleAPIStat(w http.ResponseWriter, req *http.Request, p http
 		renderJSONError(w, err, http.StatusInternalServerError)
 		return
 	}
-
-	// Marshal result into json and cache it
-	var resultJSON bytes.Buffer
-	if err := pbMarshaler.Marshal(&resultJSON, result); err != nil {
-		renderJSONError(w, err, http.StatusInternalServerError)
-		return
-	}
-	h.statCache.SetDefault(req.URL.RawQuery, resultJSON.Bytes())
-
-	renderJSONBytes(w, resultJSON.Bytes())
+	renderJSONPb(w, result)
 }
 
 func (h *handler) handleAPITopRoutes(w http.ResponseWriter, req *http.Request, p httprouter.Params) {
@@ -359,97 +309,4 @@ func (h *handler) handleAPIEdges(w http.ResponseWriter, req *http.Request, p htt
 		return
 	}
 	renderJSONPb(w, result)
-}
-
-func (h *handler) handleAPICheck(w http.ResponseWriter, req *http.Request, p httprouter.Params) {
-	type CheckResult struct {
-		*healthcheck.CheckResult
-		ErrMsg  string `json:",omitempty"`
-		HintURL string `json:",omitempty"`
-	}
-
-	success := true
-	results := make(map[healthcheck.CategoryID][]*CheckResult)
-
-	collectResults := func(result *healthcheck.CheckResult) {
-		if result.Retry || excludedChecksRE.MatchString(result.Description) {
-			return
-		}
-		var errMsg, hintURL string
-		if result.Err != nil {
-			if !result.Warning {
-				success = false
-			}
-			errMsg = result.Err.Error()
-			hintURL = fmt.Sprintf("%s%s", healthcheck.HintBaseURL, result.HintAnchor)
-		}
-		results[result.Category] = append(results[result.Category], &CheckResult{
-			CheckResult: result,
-			ErrMsg:      errMsg,
-			HintURL:     hintURL,
-		})
-	}
-	// TODO (tegioz): ignore runchecks results until we stop filtering checks
-	// in this method (see #3670 for more details)
-	_ = h.hc.RunChecks(collectResults)
-
-	renderJSON(w, map[string]interface{}{
-		"success": success,
-		"results": results,
-	})
-}
-
-func (h *handler) handleAPIResourceDefinition(w http.ResponseWriter, req *http.Request, _ httprouter.Params) {
-	var missingParams []string
-	requiredParams := []string{"namespace", "resource_type", "resource_name"}
-	for _, param := range requiredParams {
-		if req.FormValue(param) == "" {
-			missingParams = append(missingParams, param)
-		}
-	}
-	if len(missingParams) != 0 {
-		renderJSONError(w, fmt.Errorf("Required params not provided: %s", strings.Join(missingParams, ", ")), http.StatusBadRequest)
-		return
-	}
-
-	namespace := req.FormValue("namespace")
-	resourceType := req.FormValue("resource_type")
-	resourceName := req.FormValue("resource_name")
-
-	var resource interface{}
-	var err error
-	options := metav1.GetOptions{}
-	switch resourceType {
-	case k8s.CronJob:
-		resource, err = h.k8sAPI.BatchV1beta1().CronJobs(namespace).Get(resourceName, options)
-	case k8s.DaemonSet:
-		resource, err = h.k8sAPI.AppsV1().DaemonSets(namespace).Get(resourceName, options)
-	case k8s.Deployment:
-		resource, err = h.k8sAPI.AppsV1().Deployments(namespace).Get(resourceName, options)
-	case k8s.Job:
-		resource, err = h.k8sAPI.BatchV1().Jobs(namespace).Get(resourceName, options)
-	case k8s.Pod:
-		resource, err = h.k8sAPI.CoreV1().Pods(namespace).Get(resourceName, options)
-	case k8s.ReplicationController:
-		resource, err = h.k8sAPI.CoreV1().ReplicationControllers(namespace).Get(resourceName, options)
-	case k8s.ReplicaSet:
-		resource, err = h.k8sAPI.AppsV1().ReplicaSets(namespace).Get(resourceName, options)
-	case k8s.TrafficSplit:
-		resource, err = h.k8sAPI.TsClient.SplitV1alpha1().TrafficSplits(namespace).Get(resourceName, options)
-	default:
-		renderJSONError(w, errors.New("Invalid resource type: "+resourceType), http.StatusBadRequest)
-		return
-	}
-	if err != nil {
-		renderJSONError(w, err, http.StatusInternalServerError)
-		return
-	}
-
-	resourceDefinition, err := yaml.Marshal(resource)
-	if err != nil {
-		renderJSONError(w, err, http.StatusInternalServerError)
-		return
-	}
-	w.Header().Set("Content-Type", "text/yaml")
-	w.Write(resourceDefinition)
 }

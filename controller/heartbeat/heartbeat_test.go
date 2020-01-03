@@ -28,7 +28,9 @@ metadata:
   name: linkerd-config
   namespace: linkerd
   creationTimestamp: 2019-02-15T12:34:56Z
-  uid: fake-uuid`,
+data:
+  install: |
+    {"uuid":"fake-uuid"}`,
 			},
 			url.Values{
 				"k8s-version":  []string{"v0.0.0-master+$Format:%h$"},
@@ -44,7 +46,9 @@ apiVersion: v1
 metadata:
   name: linkerd-config
   namespace: linkerd
-  uid: fake-uuid`,
+data:
+  install: |
+    {"uuid":"fake-uuid"}`,
 			},
 			url.Values{
 				"k8s-version": []string{"v0.0.0-master+$Format:%h$"},

@@ -1,6 +1,7 @@
 package test
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"regexp"
@@ -32,11 +33,9 @@ func TestMain(m *testing.M) {
 }
 
 var (
-	configMapUID string
-
 	linkerdSvcs = []string{
 		"linkerd-controller-api",
-		"linkerd-dst",
+		"linkerd-destination",
 		"linkerd-grafana",
 		"linkerd-identity",
 		"linkerd-prometheus",
@@ -59,10 +58,9 @@ var (
 	// Linkerd commonly logs these errors during testing, remove these once
 	// they're addressed: https://github.com/linkerd/linkerd2/issues/2453
 	knownControllerErrorsRegex = regexp.MustCompile(strings.Join([]string{
-		`.*linkerd-controller-.*-.* tap time=".*" level=error msg="\[.*\] encountered an error: rpc error: code = Canceled desc = context canceled"`,
-		`.*linkerd-web-.*-.* web time=".*" level=error msg="Post http://linkerd-controller-api\..*\.svc\.cluster\.local:8085/api/v1/Version: context canceled"`,
-		`.*linkerd-proxy-injector-.*-.* proxy-injector time=".*" level=warning msg="failed to retrieve replicaset from indexer .*-smoke-test.*/smoke-test-.*-.*: replicaset\.apps \\"smoke-test-.*-.*\\" not found"`,
-		`.*linkerd-destination-.* destination time=".*" level=warning msg="failed to retrieve replicaset from indexer .* not found"`,
+		`.* linkerd-controller-.*-.* tap time=".*" level=error msg="\[.*\] encountered an error: rpc error: code = Canceled desc = context canceled"`,
+		`.* linkerd-web-.*-.* web time=".*" level=error msg="Post http://linkerd-controller-api\..*\.svc\.cluster\.local:8085/api/v1/Version: context canceled"`,
+		`.* linkerd-proxy-injector-.*-.* proxy-injector time=".*" level=warning msg="failed to retrieve replicaset from indexer, retrying with get request .*-smoke-test.*/smoke-test-.*-.*: replicaset\.apps \\"smoke-test-.*-.*\\" not found"`,
 	}, "|"))
 
 	knownProxyErrorsRegex = regexp.MustCompile(strings.Join([]string{
@@ -90,7 +88,7 @@ var (
 		`(Liveness|Readiness) probe failed: Get http://.*: read tcp .*: read: connection reset by peer`,
 		`(Liveness|Readiness) probe failed: Get http://.*: net/http: request canceled .*\(Client\.Timeout exceeded while awaiting headers\)`,
 		`Failed to update endpoint .*-upgrade/linkerd-.*: Operation cannot be fulfilled on endpoints "linkerd-.*": the object has been modified; please apply your changes to the latest version and try again`,
-		`error killing pod: failed to "KillPodSandbox" for ".*" with KillPodSandboxError: "rpc error: code = Unknown desc = failed to destroy network for sandbox \\".*\\": could not teardown (ipv4|ipv6) dnat: running \[/usr/sbin/(iptables|ip6tables) -t nat -X CNI-DN-.* --wait\]: exit status 1: (iptables|ip6tables): No chain/target/match by that name\.\\n"`,
+		`error killing pod: failed to "KillPodSandbox" for ".*" with KillPodSandboxError: "rpc error: code = Unknown desc = failed to destroy network for sandbox \\".*\\": could not teardown ipv4 dnat: running \[/usr/sbin/iptables -t nat -X CNI-DN-.* --wait\]: exit status 1: iptables: No chain/target/match by that name\.\\n"`,
 	}, "|"))
 
 	injectionCases = []struct {
@@ -136,70 +134,20 @@ func TestVersionPreInstall(t *testing.T) {
 }
 
 func TestCheckPreInstall(t *testing.T) {
-	if TestHelper.ExternalIssuer() {
-		t.Skip("Skipping pre-install check for external issuer test")
-	}
-
 	if TestHelper.UpgradeFromVersion() != "" {
 		t.Skip("Skipping pre-install check for upgrade test")
 	}
 
 	cmd := []string{"check", "--pre", "--expected-version", TestHelper.GetVersion()}
 	golden := "check.pre.golden"
-	out, stderr, err := TestHelper.LinkerdRun(cmd...)
+	out, _, err := TestHelper.LinkerdRun(cmd...)
 	if err != nil {
-		t.Fatalf("Check command failed\n%s\n%s", out, stderr)
+		t.Fatalf("Check command failed\n%s", out)
 	}
 
 	err = TestHelper.ValidateOutput(out, golden)
 	if err != nil {
 		t.Fatalf("Received unexpected output\n%s", err.Error())
-	}
-}
-
-func exerciseTestAppEndpoint(endpoint, namespace string) error {
-	testAppURL, err := TestHelper.URLFor(namespace, "web", 8080)
-	if err != nil {
-		return err
-	}
-	for i := 0; i < 30; i++ {
-		_, err := TestHelper.HTTPGetURL(testAppURL + endpoint)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func TestUpgradeTestAppWorksBeforeUpgrade(t *testing.T) {
-	if TestHelper.UpgradeFromVersion() != "" {
-		// make sure app is running
-		testAppNamespace := TestHelper.GetTestNamespace("upgrade-test")
-		for _, deploy := range []string{"emoji", "voting", "web"} {
-			if err := TestHelper.CheckPods(testAppNamespace, deploy, 1); err != nil {
-				t.Error(err)
-			}
-
-			if err := TestHelper.CheckDeployment(testAppNamespace, deploy, 1); err != nil {
-				t.Error(fmt.Errorf("Error validating deployment [%s]:\n%s", deploy, err))
-			}
-		}
-
-		if err := exerciseTestAppEndpoint("/api/list", testAppNamespace); err != nil {
-			t.Fatalf("Error exercising test app endpoint before upgrade %s", err)
-		}
-	} else {
-		t.Skip("Skipping for non upgrade test")
-	}
-}
-
-func TestRetrieveUidPreUpgrade(t *testing.T) {
-	if TestHelper.UpgradeFromVersion() != "" {
-		var err error
-		configMapUID, err = TestHelper.KubernetesHelper.GetConfigUID(TestHelper.GetLinkerdNamespace())
-		if err != nil || configMapUID == "" {
-			t.Fatalf("Error retrieving linkerd-config's uid %s", err)
-		}
 	}
 }
 
@@ -217,62 +165,17 @@ func TestInstallOrUpgradeCli(t *testing.T) {
 		}
 	)
 
-	if TestHelper.GetClusterDomain() != "cluster.local" {
+	if TestHelper.GetClusterDomain() != "" {
 		args = append(args, "--cluster-domain", TestHelper.GetClusterDomain())
 	}
 
-	if TestHelper.ExternalIssuer() {
-
-		// short cert lifetime to put some pressure on the CSR request, response code path
-		args = append(args, "--identity-issuance-lifetime=15s", "--identity-external-issuer=true")
-
-		err := TestHelper.CreateControlPlaneNamespaceIfNotExists(TestHelper.GetLinkerdNamespace())
-		if err != nil {
-			t.Fatalf("failed to create %s namespace: %s", TestHelper.GetLinkerdNamespace(), err)
-		}
-
-		identity := fmt.Sprintf("identity.%s.%s", TestHelper.GetLinkerdNamespace(), TestHelper.GetClusterDomain())
-
-		root, err := tls.GenerateRootCAWithDefaults(identity)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		// instead of passing the roots and key around we generate
-		// two secrets here. The second one will be used in the
-		// external_issuer_test to update the first one and trigger
-		// cert rotation in the identity service. That allows us
-		// to generated the certs on the fly and use custom domain.
-
-		if err = TestHelper.CreateTLSSecret(
-			k8s.IdentityIssuerSecretName,
-			root.Cred.Crt.EncodeCertificatePEM(),
-			root.Cred.Crt.EncodeCertificatePEM(),
-			root.Cred.EncodePrivateKeyPEM()); err != nil {
-			t.Fatal(err)
-		}
-
-		crt2, err := root.GenerateCA(identity, root.Validity, -1)
-		if err != nil {
-			t.Fatal(err)
-		}
-
-		if err = TestHelper.CreateTLSSecret(
-			k8s.IdentityIssuerSecretName+"-new",
-			root.Cred.Crt.EncodeCertificatePEM(),
-			crt2.Cred.EncodeCertificatePEM(),
-			crt2.Cred.EncodePrivateKeyPEM()); err != nil {
-			t.Fatal(err)
-		}
-	}
-
 	if TestHelper.UpgradeFromVersion() != "" {
-
 		cmd = "upgrade"
+
 		// test 2-stage install during upgrade
-		out, stderr, err := TestHelper.LinkerdRun(cmd, "config")
+		out, _, err := TestHelper.LinkerdRun(cmd, "config")
 		if err != nil {
-			t.Fatalf("linkerd upgrade config command failed\n%s\n%s", out, stderr)
+			t.Fatalf("linkerd upgrade config command failed\n%s", out)
 		}
 
 		// apply stage 1
@@ -286,9 +189,9 @@ func TestInstallOrUpgradeCli(t *testing.T) {
 	}
 
 	exec := append([]string{cmd}, args...)
-	out, stderr, err := TestHelper.LinkerdRun(exec...)
+	out, _, err := TestHelper.LinkerdRun(exec...)
 	if err != nil {
-		t.Fatalf("linkerd install command failed: \n%s\n%s", out, stderr)
+		t.Fatalf("linkerd install command failed\n%s", out)
 	}
 
 	// test `linkerd upgrade --from-manifests`
@@ -310,9 +213,9 @@ func TestInstallOrUpgradeCli(t *testing.T) {
 		if out != upgradeFromManifests {
 			// retry in case it's just a discrepancy in the heartbeat cron schedule
 			exec := append([]string{cmd}, args...)
-			out, stderr, err := TestHelper.LinkerdRun(exec...)
+			out, _, err := TestHelper.LinkerdRun(exec...)
 			if err != nil {
-				t.Fatalf("command failed: %v\n%s\n%s", exec, out, stderr)
+				t.Fatalf("command failed: %v\n%s", exec, out)
 			}
 
 			if out != upgradeFromManifests {
@@ -325,7 +228,6 @@ func TestInstallOrUpgradeCli(t *testing.T) {
 	if err != nil {
 		t.Fatalf("kubectl apply command failed\n%s", out)
 	}
-
 }
 
 func TestInstallHelm(t *testing.T) {
@@ -340,14 +242,14 @@ func TestInstallHelm(t *testing.T) {
 	}
 
 	args := []string{
-		"--set", "controllerLogLevel=debug",
-		"--set", "linkerdVersion=" + TestHelper.GetVersion(),
-		"--set", "proxy.image.version=" + TestHelper.GetVersion(),
-		"--set", "identity.trustDomain=cluster.local",
-		"--set", "identity.trustAnchorsPEM=" + root.Cred.Crt.EncodeCertificatePEM(),
-		"--set", "identity.issuer.tls.crtPEM=" + root.Cred.Crt.EncodeCertificatePEM(),
-		"--set", "identity.issuer.tls.keyPEM=" + root.Cred.EncodePrivateKeyPEM(),
-		"--set", "identity.issuer.crtExpiry=" + root.Cred.Crt.Certificate.NotAfter.Format(time.RFC3339),
+		"--set", "ControllerLogLevel=debug",
+		"--set", "LinkerdVersion=" + TestHelper.GetVersion(),
+		"--set", "Proxy.Image.Version=" + TestHelper.GetVersion(),
+		"--set", "Identity.TrustDomain=cluster.local",
+		"--set", "Identity.TrustAnchorsPEM=" + root.Cred.Crt.EncodeCertificatePEM(),
+		"--set", "Identity.Issuer.TLS.CrtPEM=" + root.Cred.Crt.EncodeCertificatePEM(),
+		"--set", "Identity.Issuer.TLS.KeyPEM=" + root.Cred.EncodePrivateKeyPEM(),
+		"--set", "Identity.Issuer.CrtExpiry=" + root.Cred.Crt.Certificate.NotAfter.Format(time.RFC3339),
 	}
 	if stdout, stderr, err := TestHelper.HelmRun("install", args...); err != nil {
 		t.Fatalf("helm install command failed\n%s\n%s", stdout, stderr)
@@ -375,21 +277,6 @@ func TestResourcesPostInstall(t *testing.T) {
 		}
 		if err := TestHelper.CheckDeployment(TestHelper.GetLinkerdNamespace(), deploy, spec.replicas); err != nil {
 			t.Fatal(fmt.Errorf("Error validating deploy [%s]:\n%s", deploy, err))
-		}
-	}
-}
-
-func TestRetrieveUidPostUpgrade(t *testing.T) {
-	if TestHelper.UpgradeFromVersion() != "" {
-		newConfigMapUID, err := TestHelper.KubernetesHelper.GetConfigUID(TestHelper.GetLinkerdNamespace())
-		if err != nil || newConfigMapUID == "" {
-			t.Fatalf("Error retrieving linkerd-config's uid %s", err)
-		}
-		if configMapUID != newConfigMapUID {
-			t.Fatalf(
-				"linkerd-config's uid after upgrade [%s] doesn't match its value before the upgrade [%s]",
-				newConfigMapUID, configMapUID,
-			)
 		}
 	}
 }
@@ -447,23 +334,13 @@ func TestCheckPostInstall(t *testing.T) {
 		t.Fatal(err.Error())
 	}
 }
-func TestUpgradeTestAppWorksAfterUpgrade(t *testing.T) {
-	if TestHelper.UpgradeFromVersion() != "" {
-		testAppNamespace := TestHelper.GetTestNamespace("upgrade-test")
-		if err := exerciseTestAppEndpoint("/api/vote?choice=:policeman:", testAppNamespace); err != nil {
-			t.Fatalf("Error exercising test app endpoint after upgrade %s", err)
-		}
-	} else {
-		t.Skip("Skipping for non upgrade test")
-	}
-}
 
 func TestInstallSP(t *testing.T) {
 	cmd := []string{"install-sp"}
 
-	out, stderr, err := TestHelper.LinkerdRun(cmd...)
+	out, _, err := TestHelper.LinkerdRun(cmd...)
 	if err != nil {
-		t.Fatalf("linkerd install-sp command failed\n%s\n%s", out, stderr)
+		t.Fatalf("linkerd install-sp command failed\n%s", out)
 	}
 
 	out, err = TestHelper.KubectlApply(out, TestHelper.GetLinkerdNamespace())
@@ -517,7 +394,7 @@ func TestInject(t *testing.T) {
 
 			prefixedNs := TestHelper.GetTestNamespace(tc.ns)
 
-			err := TestHelper.CreateDataPlaneNamespaceIfNotExists(prefixedNs, tc.annotations)
+			err := TestHelper.CreateNamespaceIfNotExists(prefixedNs, tc.annotations)
 			if err != nil {
 				t.Fatalf("failed to create %s namespace: %s", prefixedNs, err)
 			}
@@ -606,9 +483,9 @@ func TestCheckProxy(t *testing.T) {
 			golden := "check.proxy.golden"
 
 			err := TestHelper.RetryFor(time.Minute, func() error {
-				out, stderr, err := TestHelper.LinkerdRun(cmd...)
+				out, _, err := TestHelper.LinkerdRun(cmd...)
 				if err != nil {
-					return fmt.Errorf("Check command failed\n%s\n%s", out, stderr)
+					return fmt.Errorf("Check command failed\n%s", out)
 				}
 
 				err = TestHelper.ValidateOutput(out, golden)
@@ -703,14 +580,22 @@ func TestEvents(t *testing.T) {
 	if err != nil {
 		t.Errorf("kubectl get events command failed with %s\n%s", err, out)
 	}
+	var list corev1.List
+	if err := json.Unmarshal([]byte(out), &list); err != nil {
+		t.Errorf("Error unmarshaling list from `kubectl get events`: %s", err)
+	}
 
-	events, err := testutil.ParseEvents(out)
-	if err != nil {
-		t.Fatal(err)
+	if len(list.Items) == 0 {
+		t.Error("No events found")
 	}
 
 	var unknownEvents []string
-	for _, e := range events {
+	for _, i := range list.Items {
+		var e corev1.Event
+		if err := json.Unmarshal(i.Raw, &e); err != nil {
+			t.Errorf("Error unmarshaling list event from `kubectl get events`: %s", err)
+		}
+
 		if e.Type == corev1.EventTypeNormal {
 			continue
 		}

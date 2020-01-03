@@ -33,7 +33,7 @@ func TestMain(m *testing.M) {
 func TestServiceProfiles(t *testing.T) {
 
 	testNamespace := TestHelper.GetTestNamespace("serviceprofile-test")
-	err := TestHelper.CreateDataPlaneNamespaceIfNotExists(testNamespace, nil)
+	err := TestHelper.CreateNamespaceIfNotExists(testNamespace, nil)
 	if err != nil {
 		t.Fatalf("failed to create %s namespace: %s", testNamespace, err)
 	}

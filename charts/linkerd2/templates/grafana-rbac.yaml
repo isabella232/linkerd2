@@ -1,3 +1,4 @@
+{{with .Values -}}
 ---
 ###
 ### Grafana RBAC
@@ -7,7 +8,8 @@ kind: ServiceAccount
 apiVersion: v1
 metadata:
   name: linkerd-grafana
-  namespace: {{.Values.namespace}}
+  namespace: {{.Namespace}}
   labels:
-    {{.Values.controllerComponentLabel}}: grafana
-    {{.Values.controllerNamespaceLabel}}: {{.Values.namespace}}
+    {{.ControllerComponentLabel}}: grafana
+    {{.ControllerNamespaceLabel}}: {{.Namespace}}
+{{- end }}

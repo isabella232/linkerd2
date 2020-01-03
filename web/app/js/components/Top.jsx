@@ -1,4 +1,3 @@
-import { handlePageVisibility, withPageVisibility } from './util/PageVisibility.jsx';
 import ErrorBanner from './ErrorBanner.jsx';
 import PropTypes from 'prop-types';
 import React from 'react';
@@ -15,7 +14,6 @@ class Top extends React.Component {
     api: PropTypes.shape({
       PrefixedLink: PropTypes.func.isRequired,
     }).isRequired,
-    isPageVisible: PropTypes.bool.isRequired,
     pathPrefix: PropTypes.string.isRequired
   }
 
@@ -38,15 +36,6 @@ class Top extends React.Component {
 
   componentDidMount() {
     this.startServerPolling();
-  }
-
-  componentDidUpdate(prevProps) {
-    handlePageVisibility({
-      prevVisibilityState: prevProps.isPageVisible,
-      currentVisibilityState: this.props.isPageVisible,
-      onVisible: () => this.startServerPolling(),
-      onHidden: () => this.stopServerPolling(),
-    });
   }
 
   componentWillUnmount() {
@@ -93,7 +82,6 @@ class Top extends React.Component {
   stopServerPolling() {
     window.clearInterval(this.timerId);
     this.api.cancelCurrentRequests();
-    this.setState({ pendingRequests: false });
   }
 
   loadFromServer() {
@@ -179,7 +167,7 @@ class Top extends React.Component {
           tapRequestInProgress={this.state.tapRequestInProgress}
           tapIsClosing={this.state.tapIsClosing}
           updateQuery={this.updateQuery}
-          currentQuery={this.state.query} />
+          query={this.state.query} />
 
         <TopModule
           pathPrefix={this.props.pathPrefix}
@@ -191,4 +179,4 @@ class Top extends React.Component {
   }
 }
 
-export default withPageVisibility(withContext(Top));
+export default withContext(Top);

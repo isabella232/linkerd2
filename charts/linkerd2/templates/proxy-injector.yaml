@@ -1,53 +1,48 @@
+{{with .Values -}}
 ---
 ###
 ### Proxy Injector
 ###
 ---
-{{ $_ := set .Values.proxy "workloadKind" "deployment" -}}
-{{ $_ := set .Values.proxy "component" "linkerd-proxy-injector" -}}
-{{ include "linkerd.proxy.validation" .Values.proxy -}}
+{{ $_ := set .Proxy "WorkloadKind" "deployment" -}}
+{{ $_ := set .Proxy "Component" "linkerd-proxy-injector" -}}
+{{ include "linkerd.proxy.validation" .Proxy -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   annotations:
-    {{.Values.createdByAnnotation}}: {{default (printf "linkerd/helm %s" .Values.linkerdVersion) .Values.cliVersion}}
+    {{.CreatedByAnnotation}}: {{default (printf "linkerd/helm %s" .LinkerdVersion) .CliVersion}}
   labels:
-    app.kubernetes.io/name: proxy-injector
-    app.kubernetes.io/part-of: Linkerd
-    app.kubernetes.io/version: {{default .Values.linkerdVersion .Values.controllerImageVersion}}
-    {{.Values.controllerComponentLabel}}: proxy-injector
-    {{.Values.controllerNamespaceLabel}}: {{.Values.namespace}}
+    {{.ControllerComponentLabel}}: proxy-injector
+    {{.ControllerNamespaceLabel}}: {{.Namespace}}
   name: linkerd-proxy-injector
-  namespace: {{.Values.namespace}}
+  namespace: {{.Namespace}}
 spec:
-  replicas: {{.Values.controllerReplicas}}
+  replicas: {{.ControllerReplicas}}
   selector:
     matchLabels:
-      {{.Values.controllerComponentLabel}}: proxy-injector
+      {{.ControllerComponentLabel}}: proxy-injector
   template:
     metadata:
       annotations:
-        {{- if empty .Values.cliVersion }}
-        linkerd.io/helm-release-version: {{ $.Release.Revision | quote}}
-        {{- end }}
-        {{.Values.createdByAnnotation}}: {{default (printf "linkerd/helm %s" .Values.linkerdVersion) .Values.cliVersion}}
-        {{- include "partials.proxy.annotations" .Values.proxy| nindent 8}}
+        {{.CreatedByAnnotation}}: {{default (printf "linkerd/helm %s" .LinkerdVersion) .CliVersion}}
+        {{- include "partials.proxy.annotations" .Proxy| nindent 8}}
       labels:
-        {{.Values.controllerComponentLabel}}: proxy-injector
-        {{.Values.controllerNamespaceLabel}}: {{.Values.namespace}}
-        {{- include "partials.proxy.labels" .Values.proxy | nindent 8}}
+        {{.ControllerComponentLabel}}: proxy-injector
+        {{.ControllerNamespaceLabel}}: {{.Namespace}}
+        {{- include "partials.proxy.labels" .Proxy | nindent 8}}
     spec:
       {{- include "linkerd.node-selector" . | nindent 6 }}
-      {{- if .Values.enablePodAntiAffinity -}}
-      {{- $local := dict "component" "proxy-injector" "label" .Values.controllerComponentLabel -}}
+      {{- if .EnablePodAntiAffinity -}}
+      {{- $local := dict "Component" "proxy-injector" "Label" .ControllerComponentLabel -}}
       {{- include "linkerd.pod-affinity" $local | nindent 6 -}}
       {{- end }}
       containers:
       - args:
         - proxy-injector
-        - -log-level={{.Values.controllerLogLevel}}
-        image: {{.Values.controllerImage}}:{{default .Values.linkerdVersion .Values.controllerImageVersion}}
-        imagePullPolicy: {{.Values.imagePullPolicy}}
+        - -log-level={{.ControllerLogLevel}}
+        image: {{.ControllerImage}}:{{default .LinkerdVersion .ControllerImageVersion}}
+        imagePullPolicy: {{.ImagePullPolicy}}
         livenessProbe:
           httpGet:
             path: /ping
@@ -64,11 +59,11 @@ spec:
           httpGet:
             path: /ready
             port: 9995
-        {{- if .Values.proxyInjectorResources -}}
-        {{- include "partials.resources" .Values.proxyInjectorResources | nindent 8 }}
+        {{- if .ProxyInjectorResources -}}
+        {{- include "partials.resources" .ProxyInjectorResources | nindent 8 }}
         {{- end }}
         securityContext:
-          runAsUser: {{.Values.controllerUID}}
+          runAsUser: {{.ControllerUID}}
         volumeMounts:
         - mountPath: /var/run/linkerd/config
           name: config
@@ -76,7 +71,7 @@ spec:
           name: tls
           readOnly: true
       - {{- include "partials.proxy" . | indent 8 | trimPrefix (repeat 7 " ") }}
-      {{ if not .Values.noInitContainer -}}
+      {{ if not .NoInitContainer -}}
       initContainers:
       - {{- include "partials.proxy-init" . | indent 8 | trimPrefix (repeat 7 " ") }}
       {{ end -}}
@@ -94,17 +89,18 @@ kind: Service
 apiVersion: v1
 metadata:
   name: linkerd-proxy-injector
-  namespace: {{.Values.namespace}}
+  namespace: {{.Namespace}}
   labels:
-    {{.Values.controllerComponentLabel}}: proxy-injector
-    {{.Values.controllerNamespaceLabel}}: {{.Values.namespace}}
+    {{.ControllerComponentLabel}}: proxy-injector
+    {{.ControllerNamespaceLabel}}: {{.Namespace}}
   annotations:
-    {{.Values.createdByAnnotation}}: {{default (printf "linkerd/helm %s" .Values.linkerdVersion) .Values.cliVersion}}
+    {{.CreatedByAnnotation}}: {{default (printf "linkerd/helm %s" .LinkerdVersion) .CliVersion}}
 spec:
   type: ClusterIP
   selector:
-    {{.Values.controllerComponentLabel}}: proxy-injector
+    {{.ControllerComponentLabel}}: proxy-injector
   ports:
   - name: proxy-injector
     port: 443
     targetPort: proxy-injector
+{{ end -}}

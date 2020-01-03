@@ -144,15 +144,12 @@ func configureAndRunChecks(wout io.Writer, werr io.Writer, stage string, options
 		healthcheck.LinkerdVersionChecks,
 	}
 
-	var installManifest string
 	if options.preInstallOnly {
-		checks = append(checks, healthcheck.LinkerdPreInstallChecks)
+		checks = append(checks,
+			healthcheck.LinkerdPreInstallChecks,
+			healthcheck.LinkerdPreInstallGlobalResourcesChecks)
 		if !options.cniEnabled {
 			checks = append(checks, healthcheck.LinkerdPreInstallCapabilityChecks)
-		}
-		installManifest, err = renderInstallManifest()
-		if err != nil {
-			return fmt.Errorf("Error rendering install manifest: %v", err)
 		}
 	} else {
 		checks = append(checks, healthcheck.LinkerdConfigChecks)
@@ -160,11 +157,9 @@ func configureAndRunChecks(wout io.Writer, werr io.Writer, stage string, options
 		if stage != configStage {
 			checks = append(checks, healthcheck.LinkerdControlPlaneExistenceChecks)
 			checks = append(checks, healthcheck.LinkerdAPIChecks)
-			checks = append(checks, healthcheck.LinkerdIdentity)
 
 			if options.dataPlaneOnly {
 				checks = append(checks, healthcheck.LinkerdDataPlaneChecks)
-				checks = append(checks, healthcheck.LinkerdIdentityDataPlane)
 			} else {
 				checks = append(checks, healthcheck.LinkerdControlPlaneVersionChecks)
 			}
@@ -181,7 +176,6 @@ func configureAndRunChecks(wout io.Writer, werr io.Writer, stage string, options
 		VersionOverride:       options.versionOverride,
 		RetryDeadline:         time.Now().Add(options.wait),
 		NoInitContainer:       options.cniEnabled,
-		InstallManifest:       installManifest,
 	})
 
 	success := runChecks(wout, werr, hc, options.output)
@@ -336,20 +330,4 @@ func runChecksJSON(wout io.Writer, werr io.Writer, hc *healthcheck.HealthChecker
 		fmt.Fprintf(werr, "JSON serialization of the check result failed with %s", err)
 	}
 	return result
-}
-
-func renderInstallManifest() (string, error) {
-	options, err := newInstallOptionsWithDefaults()
-	if err != nil {
-		return "", err
-	}
-	values, _, err := options.validateAndBuild("", nil)
-	if err != nil {
-		return "", err
-	}
-	var b strings.Builder
-	if err := render(&b, values); err != nil {
-		return "", err
-	}
-	return b.String(), nil
 }

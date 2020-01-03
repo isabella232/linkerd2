@@ -1,8 +1,12 @@
 package get
 
 import (
+	"fmt"
 	"os"
+	"strconv"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/linkerd/linkerd2/testutil"
 )
@@ -18,6 +22,18 @@ func TestMain(m *testing.M) {
 	os.Exit(m.Run())
 }
 
+type rowStat struct {
+	name               string
+	status             string
+	meshed             string
+	success            string
+	rps                string
+	p50Latency         string
+	p95Latency         string
+	p99Latency         string
+	tcpOpenConnections string
+}
+
 //////////////////////
 /// TEST EXECUTION ///
 //////////////////////
@@ -28,14 +44,6 @@ func TestMain(m *testing.M) {
 // first few attempts fail due to missing stats, since the requests from those
 // failed attempts will eventually be recorded in the stats that we're
 // requesting, and the test will pass.
-
-// https://github.com/linkerd/linkerd2/pull/3693 caused the proxy to start
-// resolving private IP addresses with the destination service.  However,
-// the destination service does not support IP lookups and returns failures
-// for these lookups.  This negatively affects the destination service success
-// rate and can cause this test to fail.  We disable this test for now until
-// the destination service supports IP lookups.
-/*
 func TestCliStatForLinkerdNamespace(t *testing.T) {
 
 	pods, err := TestHelper.GetPodNamesForDeployment(TestHelper.GetLinkerdNamespace(), "linkerd-prometheus")
@@ -138,7 +146,7 @@ func TestCliStatForLinkerdNamespace(t *testing.T) {
 				if tt.status != "" {
 					expectedColumnCount++
 				}
-				rowStats, err := testutil.ParseRows(out, len(tt.expectedRows), expectedColumnCount)
+				rowStats, err := parseRows(out, len(tt.expectedRows), expectedColumnCount)
 				if err != nil {
 					return err
 				}
@@ -158,55 +166,114 @@ func TestCliStatForLinkerdNamespace(t *testing.T) {
 	}
 }
 
-func validateRowStats(name, expectedMeshCount, expectedStatus string, rowStats map[string]*testutil.RowStat) error {
+// check that expectedRowCount rows have been returned
+func checkRowCount(out string, expectedRowCount int) ([]string, error) {
+	rows := strings.Split(out, "\n")
+	if len(rows) < 2 {
+		return nil, fmt.Errorf(
+			"Error stripping header and trailing newline; full output:\n%s",
+			strings.Join(rows, "\n"),
+		)
+	}
+	rows = rows[1 : len(rows)-1] // strip header and trailing newline
+
+	if len(rows) != expectedRowCount {
+		return nil, fmt.Errorf(
+			"Expected [%d] rows in stat output, got [%d]; full output:\n%s",
+			expectedRowCount, len(rows), strings.Join(rows, "\n"))
+	}
+
+	return rows, nil
+}
+
+func parseRows(out string, expectedRowCount, expectedColumnCount int) (map[string]*rowStat, error) {
+	rows, err := checkRowCount(out, expectedRowCount)
+	if err != nil {
+		return nil, err
+	}
+
+	rowStats := make(map[string]*rowStat)
+	for _, row := range rows {
+		fields := strings.Fields(row)
+
+		if expectedColumnCount == 0 {
+			expectedColumnCount = 8
+		}
+		if len(fields) != expectedColumnCount {
+			return nil, fmt.Errorf(
+				"Expected [%d] columns in stat output, got [%d]; full output:\n%s",
+				expectedColumnCount, len(fields), row)
+		}
+
+		rowStats[fields[0]] = &rowStat{
+			name: fields[0],
+		}
+
+		i := 0
+		if expectedColumnCount == 9 {
+			rowStats[fields[0]].status = fields[1]
+			i = 1
+		}
+		rowStats[fields[0]].meshed = fields[1+i]
+		rowStats[fields[0]].success = fields[2+i]
+		rowStats[fields[0]].rps = fields[3+i]
+		rowStats[fields[0]].p50Latency = fields[4+i]
+		rowStats[fields[0]].p95Latency = fields[5+i]
+		rowStats[fields[0]].p99Latency = fields[6+i]
+		rowStats[fields[0]].tcpOpenConnections = fields[7+i]
+	}
+
+	return rowStats, nil
+}
+
+func validateRowStats(name, expectedMeshCount, expectedStatus string, rowStats map[string]*rowStat) error {
 	stat, ok := rowStats[name]
 	if !ok {
 		return fmt.Errorf("No stats found for [%s]", name)
 	}
 
-	if stat.Status != expectedStatus {
+	if stat.status != expectedStatus {
 		return fmt.Errorf("Expected status '%s' for '%s', got '%s'",
-			expectedStatus, name, stat.Status)
+			expectedStatus, name, stat.status)
 	}
 
-	if stat.Meshed != expectedMeshCount {
+	if stat.meshed != expectedMeshCount {
 		return fmt.Errorf("Expected mesh count [%s] for [%s], got [%s]",
-			expectedMeshCount, name, stat.Meshed)
+			expectedMeshCount, name, stat.meshed)
 	}
 
 	expectedSuccessRate := "100.00%"
-	if stat.Success != expectedSuccessRate {
+	if stat.success != expectedSuccessRate {
 		return fmt.Errorf("Expected success rate [%s] for [%s], got [%s]",
-			expectedSuccessRate, name, stat.Success)
+			expectedSuccessRate, name, stat.success)
 	}
 
-	if !strings.HasSuffix(stat.Rps, "rps") {
+	if !strings.HasSuffix(stat.rps, "rps") {
 		return fmt.Errorf("Unexpected rps for [%s], got [%s]",
-			name, stat.Rps)
+			name, stat.rps)
 	}
 
-	if !strings.HasSuffix(stat.P50Latency, "ms") {
+	if !strings.HasSuffix(stat.p50Latency, "ms") {
 		return fmt.Errorf("Unexpected p50 latency for [%s], got [%s]",
-			name, stat.P50Latency)
+			name, stat.p50Latency)
 	}
 
-	if !strings.HasSuffix(stat.P95Latency, "ms") {
+	if !strings.HasSuffix(stat.p95Latency, "ms") {
 		return fmt.Errorf("Unexpected p95 latency for [%s], got [%s]",
-			name, stat.P95Latency)
+			name, stat.p95Latency)
 	}
 
-	if !strings.HasSuffix(stat.P99Latency, "ms") {
+	if !strings.HasSuffix(stat.p99Latency, "ms") {
 		return fmt.Errorf("Unexpected p99 latency for [%s], got [%s]",
-			name, stat.P99Latency)
+			name, stat.p99Latency)
 	}
 
-	if stat.TCPOpenConnections != "-" {
-		_, err := strconv.Atoi(stat.TCPOpenConnections)
+	if stat.tcpOpenConnections != "-" {
+		_, err := strconv.Atoi(stat.tcpOpenConnections)
 		if err != nil {
-			return fmt.Errorf("Error parsing number of TCP connections [%s]: %s", stat.TCPOpenConnections, err.Error())
+			return fmt.Errorf("Error parsing number of TCP connections [%s]: %s", stat.tcpOpenConnections, err.Error())
 		}
 	}
 
 	return nil
 }
-*/

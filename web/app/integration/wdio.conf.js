@@ -3,12 +3,6 @@ exports.config = {
   path: '/',
   services: ['chromedriver'],
   runner: 'local',
-  before: function() {
-    const chai = require('chai')
-    global.dashboardAddress = "http://localhost:7777" // dashboard address
-    global.expect = chai.expect
-    chai.Should()
-},
   specs: [
       './integration/specs/*.js'
   ],
@@ -16,7 +10,7 @@ exports.config = {
       // 'path/to/excluded/files'
   ],
   maxInstances: 10,
-  capabilities: [{browserName: 'chrome'}],
+  capabilities: [{browserName: 'chrome', platform: 'OS X 10.13', version: '69.0'}],
   bail: 0,
   baseUrl: 'http://localhost',
   waitforTimeout: 10000,

@@ -104,13 +104,11 @@ spec:
 	endpoints := watcher.NewEndpointsWatcher(k8sAPI, log)
 	profiles := watcher.NewProfileWatcher(k8sAPI, log)
 	trafficSplits := watcher.NewTrafficSplitWatcher(k8sAPI, log)
-	ips := watcher.NewIPWatcher(k8sAPI, endpoints, log)
 
 	return &server{
 		endpoints,
 		profiles,
 		trafficSplits,
-		ips,
 		false,
 		"linkerd",
 		"trust.domain",
@@ -227,8 +225,7 @@ func TestGetProfiles(t *testing.T) {
 		// profile to the stream and then a second update when it gets the
 		// client profile.
 		if len(stream.updates) != 1 && len(stream.updates) != 2 {
-			// https://github.com/linkerd/linkerd2/issues/3332
-			t.Skipf("Expected 1 or 2 updates but got %d: %v", len(stream.updates), stream.updates)
+			t.Fatalf("Expected 1 or 2 updates but got %d: %v", len(stream.updates), stream.updates)
 		}
 		lastUpdate := stream.updates[len(stream.updates)-1]
 		routes := lastUpdate.GetRoutes()

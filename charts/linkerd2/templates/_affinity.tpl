@@ -5,18 +5,18 @@ affinity:
     - podAffinityTerm:
         labelSelector:
           matchExpressions:
-          - key: {{ .label }}
+          - key: {{ .Label }}
             operator: In
             values:
-            - {{ .component }}
+            - {{ .Component }}
         topologyKey: failure-domain.beta.kubernetes.io/zone
       weight: 100
     requiredDuringSchedulingIgnoredDuringExecution:
     - labelSelector:
         matchExpressions:
-        - key: {{ .label }}
+        - key: {{ .Label }}
           operator: In
           values:
-          - {{ .component }}
+          - {{ .Component }}
       topologyKey: kubernetes.io/hostname
 {{- end }}

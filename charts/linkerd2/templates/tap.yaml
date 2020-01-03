@@ -1,3 +1,4 @@
+{{with .Values -}}
 ---
 ###
 ### Tap
@@ -7,16 +8,16 @@ kind: Service
 apiVersion: v1
 metadata:
   name: linkerd-tap
-  namespace: {{.Values.namespace}}
+  namespace: {{.Namespace}}
   labels:
-    {{.Values.controllerComponentLabel}}: tap
-    {{.Values.controllerNamespaceLabel}}: {{.Values.namespace}}
+    {{.ControllerComponentLabel}}: tap
+    {{.ControllerNamespaceLabel}}: {{.Namespace}}
   annotations:
-    {{.Values.createdByAnnotation}}: {{default (printf "linkerd/helm %s" .Values.linkerdVersion) .Values.cliVersion}}
+    {{.CreatedByAnnotation}}: {{default (printf "linkerd/helm %s" .LinkerdVersion) .CliVersion}}
 spec:
   type: ClusterIP
   selector:
-    {{.Values.controllerComponentLabel}}: tap
+    {{.ControllerComponentLabel}}: tap
   ports:
   - name: grpc
     port: 8088
@@ -25,55 +26,49 @@ spec:
     port: 443
     targetPort: apiserver
 ---
-{{ $_ := set .Values.proxy "workloadKind" "deployment" -}}
-{{ $_ := set .Values.proxy "component" "linkerd-tap" -}}
-{{ include "linkerd.proxy.validation" .Values.proxy -}}
+{{ $_ := set .Proxy "WorkloadKind" "deployment" -}}
+{{ $_ := set .Proxy "Component" "linkerd-tap" -}}
+{{ include "linkerd.proxy.validation" .Proxy -}}
 kind: Deployment
 apiVersion: apps/v1
 metadata:
   annotations:
-    {{.Values.createdByAnnotation}}: {{default (printf "linkerd/helm %s" .Values.linkerdVersion) .Values.cliVersion}}
+    {{.CreatedByAnnotation}}: {{default (printf "linkerd/helm %s" .LinkerdVersion) .CliVersion}}
   labels:
-    app.kubernetes.io/name: tap
-    app.kubernetes.io/part-of: Linkerd
-    app.kubernetes.io/version: {{default .Values.linkerdVersion .Values.controllerImageVersion}}
-    {{.Values.controllerComponentLabel}}: tap
-    {{.Values.controllerNamespaceLabel}}: {{.Values.namespace}}
+    {{.ControllerComponentLabel}}: tap
+    {{.ControllerNamespaceLabel}}: {{.Namespace}}
   name: linkerd-tap
-  namespace: {{.Values.namespace}}
+  namespace: {{.Namespace}}
 spec:
-  replicas: {{.Values.controllerReplicas}}
+  replicas: {{.ControllerReplicas}}
   selector:
     matchLabels:
-      {{.Values.controllerComponentLabel}}: tap
-      {{.Values.controllerNamespaceLabel}}: {{.Values.namespace}}
-      {{- include "partials.proxy.labels" .Values.proxy | nindent 6}}
+      {{.ControllerComponentLabel}}: tap
+      {{.ControllerNamespaceLabel}}: {{.Namespace}}
+      {{- include "partials.proxy.labels" .Proxy | nindent 6}}
   template:
     metadata:
       annotations:
-        {{- if empty .Values.cliVersion }}
-        linkerd.io/helm-release-version: {{ $.Release.Revision | quote}}
-        {{- end }}
-        {{.Values.createdByAnnotation}}: {{default (printf "linkerd/helm %s" .Values.linkerdVersion) .Values.cliVersion}}
-        {{- include "partials.proxy.annotations" .Values.proxy| nindent 8}}
+        {{.CreatedByAnnotation}}: {{default (printf "linkerd/helm %s" .LinkerdVersion) .CliVersion}}
+        {{- include "partials.proxy.annotations" .Proxy| nindent 8}}
       labels:
-        {{.Values.controllerComponentLabel}}: tap
-        {{.Values.controllerNamespaceLabel}}: {{.Values.namespace}}
-        {{- include "partials.proxy.labels" .Values.proxy | nindent 8}}
+        {{.ControllerComponentLabel}}: tap
+        {{.ControllerNamespaceLabel}}: {{.Namespace}}
+        {{- include "partials.proxy.labels" .Proxy | nindent 8}}
     spec:
       {{- include "linkerd.node-selector" . | nindent 6 }}
-      {{- if .Values.enablePodAntiAffinity -}}
-      {{- $local := dict "component" "tap" "label" .Values.controllerComponentLabel -}}
+      {{- if .EnablePodAntiAffinity -}}
+      {{- $local := dict "Component" "tap" "Label" .ControllerComponentLabel -}}
       {{- include "linkerd.pod-affinity" $local | nindent 6 -}}
       {{- end }}
       containers:
       - args:
         - tap
-        - -controller-namespace={{.Values.namespace}}
-        - -log-level={{.Values.controllerLogLevel}}
+        - -controller-namespace={{.Namespace}}
+        - -log-level={{.ControllerLogLevel}}
         {{- include "partials.linkerd.trace" . | nindent 8 -}}
-        image: {{.Values.controllerImage}}:{{default .Values.linkerdVersion .Values.controllerImageVersion}}
-        imagePullPolicy: {{.Values.imagePullPolicy}}
+        image: {{.ControllerImage}}:{{default .LinkerdVersion .ControllerImageVersion}}
+        imagePullPolicy: {{.ImagePullPolicy}}
         livenessProbe:
           httpGet:
             path: /ping
@@ -92,11 +87,11 @@ spec:
           httpGet:
             path: /ready
             port: 9998
-        {{- if .Values.tapResources -}}
-        {{- include "partials.resources" .Values.tapResources | nindent 8 }}
+        {{- if .TapResources -}}
+        {{- include "partials.resources" .TapResources | nindent 8 }}
         {{- end }}
         securityContext:
-          runAsUser: {{.Values.controllerUID}}
+          runAsUser: {{.ControllerUID}}
         volumeMounts:
         - mountPath: /var/run/linkerd/tls
           name: tls
@@ -104,7 +99,7 @@ spec:
         - mountPath: /var/run/linkerd/config
           name: config
       - {{- include "partials.proxy" . | indent 8 | trimPrefix (repeat 7 " ") }}
-      {{ if not .Values.noInitContainer -}}
+      {{ if not .NoInitContainer -}}
       initContainers:
       - {{- include "partials.proxy-init" . | indent 8 | trimPrefix (repeat 7 " ") }}
       {{ end -}}
@@ -117,3 +112,4 @@ spec:
       - name: tls
         secret:
           secretName: linkerd-tap-tls
+{{ end -}}

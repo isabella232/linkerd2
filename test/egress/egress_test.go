@@ -34,13 +34,13 @@ func TestMain(m *testing.M) {
 //////////////////////
 
 func TestEgressHttp(t *testing.T) {
-	out, stderr, err := TestHelper.LinkerdRun("inject", "testdata/proxy.yaml")
+	out, _, err := TestHelper.LinkerdRun("inject", "testdata/proxy.yaml")
 	if err != nil {
-		t.Fatalf("Unexpected error: %v\n%s", err, stderr)
+		t.Fatalf("Unexpected error: %v", err)
 	}
 
 	prefixedNs := TestHelper.GetTestNamespace("egress-test")
-	err = TestHelper.CreateDataPlaneNamespaceIfNotExists(prefixedNs, nil)
+	err = TestHelper.CreateNamespaceIfNotExists(prefixedNs, nil)
 	if err != nil {
 		t.Fatalf("failed to create %s namespace: %s", prefixedNs, err)
 	}

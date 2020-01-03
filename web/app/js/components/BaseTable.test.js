@@ -1,8 +1,6 @@
 import _merge from 'lodash/merge';
 import ApiHelpers from './util/ApiHelpers.jsx';
 import BaseTable from './BaseTable.jsx';
-import TableBody from '@material-ui/core/TableBody';
-import TableRow from '@material-ui/core/TableRow';
 import { routerWrap } from '../../test/testHelpers.jsx';
 import { mount } from 'enzyme';
 
@@ -83,41 +81,5 @@ describe("Tests for <BaseTable>", () => {
     const emptyCard = table.find("EmptyCard");
     expect(emptyCard).toBeDefined();
     expect(emptyCard).toHaveLength(1);
-  });
-
-  it("if enableFilter is true, user can filter rows by search term", () => {
-    let extraProps = _merge({}, defaultProps, {
-      tableRows: [{
-        deployment: "authors",
-        namespace: "default",
-        key: "default-deployment-authors",
-        pods: {totalPods: "1", meshedPods: "1"}
-      },
-      {
-        deployment: "books",
-        namespace: "default",
-        key: "default-deployment-books",
-        pods: {totalPods: "2", meshedPods: "1"}
-      }],
-      tableColumns: tableColumns,
-      enableFilter: true
-    });
-
-    const component = shallow(<BaseTable {...extraProps} />);
-    const table = component.dive();
-    expect(table.find(TableBody).find(TableRow)).toHaveLength(2);
-    const enableFilter = component.prop("enableFilter");
-    const filterIcon = table.find("FilterListIcon");
-    expect(enableFilter).toEqual(true);
-    expect(filterIcon).toHaveLength(1);
-
-    filterIcon.simulate("click");
-    setTimeout(() => {
-      const input = table.find("input");
-      input.simulate("change", {target: {value: "authors"}});
-      expect(table.html()).not.toContain('books');
-      expect(table.html()).toContain('authors');
-      expect(table.find(TableBody).find(TableRow)).toHaveLength(1);
-    }, 100);
   });
 });

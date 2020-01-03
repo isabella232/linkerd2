@@ -1,4 +1,4 @@
-package linkerd2
+package charts
 
 import (
 	"reflect"
@@ -23,6 +23,7 @@ func TestNewValues(t *testing.T) {
 		PrometheusImage:             "prom/prometheus:v2.11.1",
 		GrafanaImage:                "gcr.io/linkerd-io/grafana",
 		ImagePullPolicy:             "IfNotPresent",
+		UUID:                        "",
 		CliVersion:                  "linkerd/cli dev-undefined",
 		ControllerReplicas:          1,
 		ControllerLogLevel:          "info",
@@ -47,10 +48,6 @@ func TestNewValues(t *testing.T) {
 		InstallNamespace:            true,
 		NodeSelector: map[string]string{
 			"beta.kubernetes.io/os": "linux",
-		},
-
-		Dashboard: &Dashboard{
-			Replicas: 1,
 		},
 
 		Identity: &Identity{
@@ -98,8 +95,7 @@ func TestNewValues(t *testing.T) {
 				CollectorSvcAddr:    "",
 				CollectorSvcAccount: "default",
 			},
-			UID:                   2102,
-			WaitBeforeExitSeconds: 0,
+			UID: 2102,
 		},
 
 		ProxyInit: &ProxyInit{

@@ -1,3 +1,4 @@
+{{with .Values -}}
 ---
 ###
 ### Service Profile Validator RBAC
@@ -6,10 +7,10 @@
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: linkerd-{{.Values.namespace}}-sp-validator
+  name: linkerd-{{.Namespace}}-sp-validator
   labels:
-    {{.Values.controllerComponentLabel}}: sp-validator
-    {{.Values.controllerNamespaceLabel}}: {{.Values.namespace}}
+    {{.ControllerComponentLabel}}: sp-validator
+    {{.ControllerNamespaceLabel}}: {{.Namespace}}
 rules:
 - apiGroups: [""]
   resources: ["pods"]
@@ -18,52 +19,52 @@ rules:
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: linkerd-{{.Values.namespace}}-sp-validator
+  name: linkerd-{{.Namespace}}-sp-validator
   labels:
-    {{.Values.controllerComponentLabel}}: sp-validator
-    {{.Values.controllerNamespaceLabel}}: {{.Values.namespace}}
+    {{.ControllerComponentLabel}}: sp-validator
+    {{.ControllerNamespaceLabel}}: {{.Namespace}}
 subjects:
 - kind: ServiceAccount
   name: linkerd-sp-validator
-  namespace: {{.Values.namespace}}
+  namespace: {{.Namespace}}
   apiGroup: ""
 roleRef:
   kind: ClusterRole
-  name: linkerd-{{.Values.namespace}}-sp-validator
+  name: linkerd-{{.Namespace}}-sp-validator
   apiGroup: rbac.authorization.k8s.io
 ---
 kind: ServiceAccount
 apiVersion: v1
 metadata:
   name: linkerd-sp-validator
-  namespace: {{.Values.namespace}}
+  namespace: {{.Namespace}}
   labels:
-    {{.Values.controllerComponentLabel}}: sp-validator
-    {{.Values.controllerNamespaceLabel}}: {{.Values.namespace}}
+    {{.ControllerComponentLabel}}: sp-validator
+    {{.ControllerNamespaceLabel}}: {{.Namespace}}
 ---
 kind: Secret
 apiVersion: v1
 metadata:
   name: linkerd-sp-validator-tls
-  namespace: {{ .Values.namespace }}
+  namespace: {{ .Namespace }}
   labels:
-    {{.Values.controllerComponentLabel}}: sp-validator
-    {{.Values.controllerNamespaceLabel}}: {{.Values.namespace}}
+    {{.ControllerComponentLabel}}: sp-validator
+    {{.ControllerNamespaceLabel}}: {{.Namespace}}
   annotations:
-    {{.Values.createdByAnnotation}}: {{default (printf "linkerd/helm %s" .Values.linkerdVersion) .Values.cliVersion}}
+    {{.CreatedByAnnotation}}: {{default (printf "linkerd/helm %s" .LinkerdVersion) .CliVersion}}
 type: Opaque
 data:
-  {{ $ca := genCA (printf "linkerd-sp-validator.%s.svc" .Values.namespace) 365 -}}
-  crt.pem: {{ ternary (b64enc $ca.Cert) (b64enc (trim .Values.profileValidator.crtPEM)) (empty .Values.profileValidator.crtPEM) }}
-  key.pem: {{ ternary (b64enc $ca.Key) (b64enc (trim .Values.profileValidator.keyPEM)) (empty .Values.profileValidator.keyPEM) }}
+  {{ $ca := genCA (printf "linkerd-sp-validator.%s.svc" .Namespace) 365 -}}
+  crt.pem: {{ ternary (b64enc $ca.Cert) (b64enc (trim .ProfileValidator.CrtPEM)) (empty .ProfileValidator.CrtPEM) }}
+  key.pem: {{ ternary (b64enc $ca.Key) (b64enc (trim .ProfileValidator.KeyPEM)) (empty .ProfileValidator.KeyPEM) }}
 ---
 apiVersion: admissionregistration.k8s.io/v1beta1
 kind: ValidatingWebhookConfiguration
 metadata:
   name: linkerd-sp-validator-webhook-config
   labels:
-    {{.Values.controllerComponentLabel}}: sp-validator
-    {{.Values.controllerNamespaceLabel}}: {{.Values.namespace}}
+    {{.ControllerComponentLabel}}: sp-validator
+    {{.ControllerNamespaceLabel}}: {{.Namespace}}
 webhooks:
 - name: linkerd-sp-validator.linkerd.io
   namespaceSelector:
@@ -75,15 +76,16 @@ webhooks:
   clientConfig:
     service:
       name: linkerd-sp-validator
-      namespace: {{ .Values.namespace }}
+      namespace: {{ .Namespace }}
       path: "/"
-    caBundle: {{ ternary (b64enc $ca.Cert) (b64enc (trim .Values.profileValidator.crtPEM)) (empty .Values.profileValidator.crtPEM) }}
-  failurePolicy: {{.Values.webhookFailurePolicy}}
+    caBundle: {{ ternary (b64enc $ca.Cert) (b64enc (trim .ProfileValidator.CrtPEM)) (empty .ProfileValidator.CrtPEM) }}
+  failurePolicy: {{.WebhookFailurePolicy}}
   rules:
   - operations: [ "CREATE" , "UPDATE" ]
     apiGroups: ["linkerd.io"]
     apiVersions: ["v1alpha1", "v1alpha2"]
     resources: ["serviceprofiles"]
-  {{- if not .Values.omitWebhookSideEffects }}
+  {{- if not .OmitWebhookSideEffects }}
   sideEffects: None
   {{- end }}
+{{end -}}

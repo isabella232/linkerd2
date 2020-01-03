@@ -116,16 +116,6 @@ export const toClassName = name => {
 };
 
 /*
- Create regex string from user input for a filter
-*/
-export const regexFilterString = input => {
-  // make input lower case and strip out unwanted characters
-  input = input.replace(/[^A-Z0-9/.\-_*]/gi, "").toLowerCase();
-  // replace "*" in input with wildcard
-  return new RegExp(input.replace(/[*]/g, ".+"));
-};
-
-/*
   Nicely readable names for the stat resources
 */
 export const friendlyTitle = singularOrPluralResource => {
@@ -139,10 +129,6 @@ export const friendlyTitle = singularOrPluralResource => {
     titleCase = _startCase("stateful set");
   } else if (resource === "trafficsplit") {
     titleCase = _startCase("traffic split");
-  } else if (resource === "cronjob") {
-    titleCase = _startCase("cron job");
-  } else if (resource === "replicaset") {
-    titleCase = _startCase("replica set");
   }
 
   let titles = { singular: titleCase };
@@ -172,8 +158,7 @@ const camelCaseLookUp = {
   "replicationcontroller": "replicationController",
   "statefulset": "statefulSet",
   "trafficsplit": "trafficSplit",
-  "daemonset": "daemonSet",
-  "cronjob": "cronJob",
+  "daemonset": "daemonSet"
 };
 
 export const resourceTypeToCamelCase = resource => camelCaseLookUp[resource] || resource;
@@ -192,8 +177,7 @@ export const shortNameLookup = {
   "statefulset": "sts",
   "trafficsplit": "ts",
   "job": "job",
-  "authority": "au",
-  "cronjob": "cj",
+  "authority": "au"
 };
 
 export const podOwnerLookup = {
@@ -202,7 +186,6 @@ export const podOwnerLookup = {
   "replicationcontroller": "rc",
   "replicaset": "rs",
   "statefulset": "sts",
-  "cronjob": "cj",
 };
 
 export const toShortResourceName = name => shortNameLookup[name] || name;

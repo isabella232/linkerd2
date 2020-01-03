@@ -31,20 +31,21 @@ import (
 	"github.com/linkerd/linkerd2-proxy-init/cmd"
 	"github.com/linkerd/linkerd2-proxy-init/iptables"
 	"github.com/linkerd/linkerd2/pkg/k8s"
+	"github.com/projectcalico/libcalico-go/lib/logutils"
 	"github.com/sirupsen/logrus"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // ProxyInit is the configuration for the proxy-init binary
 type ProxyInit struct {
-	IncomingProxyPort     int      `json:"incoming-proxy-port"`
-	OutgoingProxyPort     int      `json:"outgoing-proxy-port"`
-	ProxyUID              int      `json:"proxy-uid"`
-	PortsToRedirect       []int    `json:"ports-to-redirect"`
-	InboundPortsToIgnore  []string `json:"inbound-ports-to-ignore"`
-	OutboundPortsToIgnore []string `json:"outbound-ports-to-ignore"`
-	Simulate              bool     `json:"simulate"`
-	UseWaitFlag           bool     `json:"use-wait-flag"`
+	IncomingProxyPort     int   `json:"incoming-proxy-port"`
+	OutgoingProxyPort     int   `json:"outgoing-proxy-port"`
+	ProxyUID              int   `json:"proxy-uid"`
+	PortsToRedirect       []int `json:"ports-to-redirect"`
+	InboundPortsToIgnore  []int `json:"inbound-ports-to-ignore"`
+	OutboundPortsToIgnore []int `json:"outbound-ports-to-ignore"`
+	Simulate              bool  `json:"simulate"`
+	UseWaitFlag           bool  `json:"use-wait-flag"`
 }
 
 // Kubernetes a K8s specific struct to hold config
@@ -76,6 +77,10 @@ type PluginConf struct {
 }
 
 func main() {
+	// Set up logging formatting.
+	logrus.SetFormatter(&logutils.Formatter{})
+	// Install a hook that adds file/line no information.
+	logrus.AddHook(&logutils.ContextHook{})
 	skel.PluginMain(cmdAdd, cmdDel, version.All)
 }
 

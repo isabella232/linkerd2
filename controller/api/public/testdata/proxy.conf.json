@@ -13,7 +13,7 @@
   "ignoreInboundPorts": [],
   "ignoreOutboundPorts": [
     {
-      "portRange": "123"
+      "port": 123
     }
   ],
   "inboundPort": {

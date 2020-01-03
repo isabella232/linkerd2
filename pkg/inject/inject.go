@@ -11,13 +11,11 @@ import (
 
 	"github.com/linkerd/linkerd2/controller/gen/config"
 	"github.com/linkerd/linkerd2/pkg/charts"
-	l5dcharts "github.com/linkerd/linkerd2/pkg/charts/linkerd2"
 	"github.com/linkerd/linkerd2/pkg/k8s"
 	"github.com/linkerd/linkerd2/pkg/version"
 	log "github.com/sirupsen/logrus"
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
-	batchv1beta1 "k8s.io/api/batch/v1beta1"
 	corev1 "k8s.io/api/core/v1"
 	k8sResource "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -114,15 +112,15 @@ type ResourceConfig struct {
 }
 
 type patch struct {
-	l5dcharts.Values
-	PathPrefix            string                    `json:"pathPrefix"`
-	AddRootAnnotations    bool                      `json:"addRootAnnotations"`
-	Annotations           map[string]string         `json:"annotations"`
-	AddRootLabels         bool                      `json:"addRootLabels"`
-	AddRootInitContainers bool                      `json:"addRootInitContainers"`
-	AddRootVolumes        bool                      `json:"addRootVolumes"`
-	Labels                map[string]string         `json:"labels"`
-	DebugContainer        *l5dcharts.DebugContainer `json:"debugContainer"`
+	charts.Values
+	PathPrefix            string
+	AddRootAnnotations    bool
+	Annotations           map[string]string
+	AddRootLabels         bool
+	AddRootInitContainers bool
+	AddRootVolumes        bool
+	Labels                map[string]string
+	DebugContainer        *charts.DebugContainer
 }
 
 // NewResourceConfig creates and initializes a ResourceConfig
@@ -198,18 +196,14 @@ func (conf *ResourceConfig) GetPatch(injectProxy bool) ([]byte, error) {
 		clusterDomain = "cluster.local"
 	}
 	values := &patch{
-		Values: l5dcharts.Values{
+		Values: charts.Values{
 			Namespace:     conf.configs.GetGlobal().GetLinkerdNamespace(),
 			ClusterDomain: clusterDomain,
 		},
 		Annotations: map[string]string{},
 		Labels:      map[string]string{},
 	}
-	switch strings.ToLower(conf.workload.metaType.Kind) {
-	case k8s.Pod:
-	case k8s.CronJob:
-		values.PathPrefix = "/spec/jobTemplate/spec/template"
-	default:
+	if strings.ToLower(conf.workload.metaType.Kind) != k8s.Pod {
 		values.PathPrefix = "/spec/template"
 	}
 
@@ -269,8 +263,6 @@ func (conf *ResourceConfig) getFreshWorkloadObj() runtime.Object {
 		return &corev1.Pod{}
 	case k8s.Namespace:
 		return &corev1.Namespace{}
-	case k8s.CronJob:
-		return &batchv1beta1.CronJob{}
 	}
 
 	return nil
@@ -391,16 +383,6 @@ func (conf *ResourceConfig) parse(bytes []byte) error {
 			conf.workload.Meta.Annotations = map[string]string{}
 		}
 
-	case *batchv1beta1.CronJob:
-		if err := yaml.Unmarshal(bytes, v); err != nil {
-			return err
-		}
-
-		conf.workload.obj = v
-		conf.workload.Meta = &v.ObjectMeta
-		conf.pod.labels[k8s.ProxyCronJobLabel] = v.Name
-		conf.complete(&v.Spec.JobTemplate.Spec.Template)
-
 	case *corev1.Pod:
 		if err := yaml.Unmarshal(bytes, v); err != nil {
 			return err
@@ -451,25 +433,24 @@ func (conf *ResourceConfig) complete(template *corev1.PodTemplateSpec) {
 
 // injectPodSpec adds linkerd sidecars to the provided PodSpec.
 func (conf *ResourceConfig) injectPodSpec(values *patch) {
-	values.Proxy = &l5dcharts.Proxy{
+	values.Proxy = &charts.Proxy{
 		Component:              conf.pod.labels[k8s.ProxyDeploymentLabel],
 		EnableExternalProfiles: conf.enableExternalProfiles(),
 		DisableTap:             conf.tapDisabled(),
-		Image: &l5dcharts.Image{
+		Image: &charts.Image{
 			Name:       conf.proxyImage(),
 			Version:    conf.proxyVersion(),
 			PullPolicy: conf.proxyImagePullPolicy(),
 		},
 		LogLevel: conf.proxyLogLevel(),
-		Ports: &l5dcharts.Ports{
+		Ports: &charts.Ports{
 			Admin:    conf.proxyAdminPort(),
 			Control:  conf.proxyControlPort(),
 			Inbound:  conf.proxyInboundPort(),
 			Outbound: conf.proxyOutboundPort(),
 		},
-		UID:                   conf.proxyUID(),
-		Resources:             conf.proxyResourceRequirements(),
-		WaitBeforeExitSeconds: conf.proxyWaitBeforeExitSeconds(),
+		UID:       conf.proxyUID(),
+		Resources: conf.proxyResourceRequirements(),
 	}
 
 	if v := conf.pod.meta.Annotations[k8s.ProxyEnableDebugAnnotation]; v != "" {
@@ -481,8 +462,8 @@ func (conf *ResourceConfig) injectPodSpec(values *patch) {
 
 		if debug {
 			log.Infof("inject debug container")
-			values.DebugContainer = &l5dcharts.DebugContainer{
-				Image: &l5dcharts.Image{
+			values.DebugContainer = &charts.DebugContainer{
+				Image: &charts.Image{
 					Name:       k8s.DebugSidecarImage,
 					Version:    conf.configs.GetGlobal().GetVersion(),
 					PullPolicy: conf.proxyImagePullPolicy(),
@@ -497,7 +478,7 @@ func (conf *ResourceConfig) injectPodSpec(values *patch) {
 	// enabled
 	if conf.pod.spec.Containers != nil && len(conf.pod.spec.Containers) > 0 {
 		if sc := conf.pod.spec.Containers[0].SecurityContext; sc != nil && sc.Capabilities != nil {
-			values.Proxy.Capabilities = &l5dcharts.Capabilities{
+			values.Proxy.Capabilities = &charts.Capabilities{
 				Add:  []string{},
 				Drop: []string{},
 			}
@@ -511,7 +492,7 @@ func (conf *ResourceConfig) injectPodSpec(values *patch) {
 	}
 
 	if saVolumeMount != nil {
-		values.Proxy.SAMountPath = &l5dcharts.SAMountPath{
+		values.Proxy.SAMountPath = &charts.SAMountPath{
 			Name:      saVolumeMount.Name,
 			MountPath: saVolumeMount.MountPath,
 			ReadOnly:  saVolumeMount.ReadOnly,
@@ -528,7 +509,7 @@ func (conf *ResourceConfig) injectPodSpec(values *patch) {
 		return
 	}
 
-	values.Identity = &l5dcharts.Identity{
+	values.Identity = &charts.Identity{
 		TrustAnchorsPEM: idctx.GetTrustAnchorsPem(),
 		TrustDomain:     idctx.GetTrustDomain(),
 	}
@@ -542,20 +523,20 @@ func (conf *ResourceConfig) injectPodSpec(values *patch) {
 }
 
 func (conf *ResourceConfig) injectProxyInit(values *patch) {
-	values.ProxyInit = &l5dcharts.ProxyInit{
-		Image: &l5dcharts.Image{
+	values.ProxyInit = &charts.ProxyInit{
+		Image: &charts.Image{
 			Name:       conf.proxyInitImage(),
 			PullPolicy: conf.proxyInitImagePullPolicy(),
 			Version:    conf.proxyInitVersion(),
 		},
 		IgnoreInboundPorts:  conf.proxyInboundSkipPorts(),
 		IgnoreOutboundPorts: conf.proxyOutboundSkipPorts(),
-		Resources: &l5dcharts.Resources{
-			CPU: l5dcharts.Constraints{
+		Resources: &charts.Resources{
+			CPU: charts.Constraints{
 				Limit:   proxyInitResourceLimitCPU,
 				Request: proxyInitResourceRequestCPU,
 			},
-			Memory: l5dcharts.Constraints{
+			Memory: charts.Constraints{
 				Limit:   proxyInitResourceLimitMemory,
 				Request: proxyInitResourceRequestMemory,
 			},
@@ -581,7 +562,7 @@ func (conf *ResourceConfig) serviceAccountVolumeMount() *corev1.VolumeMount {
 	return nil
 }
 
-func (conf *ResourceConfig) trace() *l5dcharts.Trace {
+func (conf *ResourceConfig) trace() *charts.Trace {
 	var (
 		svcAddr    = conf.getOverride(k8s.ProxyTraceCollectorSvcAddrAnnotation)
 		svcAccount = conf.getOverride(k8s.ProxyTraceCollectorSvcAccountAnnotation)
@@ -605,7 +586,7 @@ func (conf *ResourceConfig) trace() *l5dcharts.Trace {
 		ns = hostname[1]
 	}
 
-	return &l5dcharts.Trace{
+	return &charts.Trace{
 		CollectorSvcAddr:    svcAddr,
 		CollectorSvcAccount: fmt.Sprintf("%s.%s", svcAccount, ns),
 	}
@@ -758,21 +739,7 @@ func (conf *ResourceConfig) tapDisabled() bool {
 	return false
 }
 
-func (conf *ResourceConfig) proxyWaitBeforeExitSeconds() uint64 {
-	if override := conf.getOverride(k8s.ProxyWaitBeforeExitSecondsAnnotation); override != "" {
-		waitBeforeExitSeconds, err := strconv.ParseUint(override, 10, 64)
-		if nil != err {
-			log.Warnf("unrecognized value used for the %s annotation, uint64 is expected: %s",
-				k8s.ProxyWaitBeforeExitSecondsAnnotation, override)
-		}
-
-		return waitBeforeExitSeconds
-	}
-
-	return 0
-}
-
-func (conf *ResourceConfig) proxyResourceRequirements() *l5dcharts.Resources {
+func (conf *ResourceConfig) proxyResourceRequirements() *charts.Resources {
 	var (
 		requestCPU    k8sResource.Quantity
 		requestMemory k8sResource.Quantity
@@ -780,7 +747,7 @@ func (conf *ResourceConfig) proxyResourceRequirements() *l5dcharts.Resources {
 		limitMemory   k8sResource.Quantity
 		err           error
 	)
-	res := &l5dcharts.Resources{}
+	res := &charts.Resources{}
 
 	if override := conf.getOverride(k8s.ProxyCPURequestAnnotation); override != "" {
 		requestCPU, err = k8sResource.ParseQuantity(override)
@@ -875,11 +842,12 @@ func (conf *ResourceConfig) proxyInboundSkipPorts() string {
 		return override
 	}
 
-	portRanges := []string{}
-	for _, portOrRange := range conf.configs.GetProxy().GetIgnoreInboundPorts() {
-		portRanges = append(portRanges, portOrRange.GetPortRange())
+	ports := []string{}
+	for _, port := range conf.configs.GetProxy().GetIgnoreInboundPorts() {
+		portStr := strconv.FormatUint(uint64(port.GetPort()), 10)
+		ports = append(ports, portStr)
 	}
-	return strings.Join(portRanges, ",")
+	return strings.Join(ports, ",")
 }
 
 func (conf *ResourceConfig) proxyOutboundSkipPorts() string {
@@ -887,11 +855,12 @@ func (conf *ResourceConfig) proxyOutboundSkipPorts() string {
 		return override
 	}
 
-	portRanges := []string{}
+	ports := []string{}
 	for _, port := range conf.configs.GetProxy().GetIgnoreOutboundPorts() {
-		portRanges = append(portRanges, port.GetPortRange())
+		portStr := strconv.FormatUint(uint64(port.GetPort()), 10)
+		ports = append(ports, portStr)
 	}
-	return strings.Join(portRanges, ",")
+	return strings.Join(ports, ",")
 }
 
 // GetOverriddenConfiguration returns a map of the overridden proxy annotations

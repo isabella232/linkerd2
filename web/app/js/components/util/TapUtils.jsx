@@ -38,9 +38,7 @@ export const tapResourceTypes = [
   "pod",
   "replicationcontroller",
   "statefulset",
-  "job",
-  "replicaset",
-  "cronjob"
+  "job"
 ];
 
 // use a generator to get this object, to prevent it from being overwritten
@@ -65,8 +63,7 @@ export const tapQueryProps = {
   path: PropTypes.string,
   scheme: PropTypes.string,
   authority: PropTypes.string,
-  maxRps: PropTypes.string,
-  extract: PropTypes.bool,
+  maxRps: PropTypes.string
 };
 
 export const tapQueryPropType = PropTypes.shape(tapQueryProps);
@@ -353,7 +350,7 @@ export const srcDstColumn = (d, resourceType, ResourceLink) => {
       container
       direction="row"
       alignItems="center"
-      spacing={1}>
+      spacing={8}>
       <Grid item>
         {link}
       </Grid>

@@ -1,4 +1,5 @@
-{{- if (.Values.installNamespace) -}}
+{{with .Values -}}
+{{- if (.InstallNamespace) -}}
 ---
 ###
 ### Linkerd Namespace
@@ -7,10 +8,11 @@
 kind: Namespace
 apiVersion: v1
 metadata:
-  name: {{ .Values.namespace }}
+  name: {{ .Namespace }}
   annotations:
-    {{.Values.proxyInjectAnnotation}}: {{.Values.proxyInjectDisabled}}
+    {{.ProxyInjectAnnotation}}: {{.ProxyInjectDisabled}}
   labels:
-    {{.Values.linkerdNamespaceLabel}}: "true"
+    {{.LinkerdNamespaceLabel}}: "true"
     config.linkerd.io/admission-webhooks: disabled
 {{ end -}}
+{{- end -}}

@@ -1,3 +1,4 @@
+{{with .Values -}}
 ---
 ###
 ### TrafficSplit CRD
@@ -9,9 +10,9 @@ kind: CustomResourceDefinition
 metadata:
   name: trafficsplits.split.smi-spec.io
   annotations:
-    {{.Values.createdByAnnotation}}: {{default (printf "linkerd/helm %s" .Values.linkerdVersion) .Values.cliVersion}}
+    {{.CreatedByAnnotation}}: {{default (printf "linkerd/helm %s" .LinkerdVersion) .CliVersion}}
   labels:
-    {{.Values.controllerNamespaceLabel}}: {{.Values.namespace}}
+    {{.ControllerNamespaceLabel}}: {{.Namespace}}
 spec:
   group: split.smi-spec.io
   version: v1alpha1
@@ -27,3 +28,4 @@ spec:
     type: string
     description: The apex service of this split.
     JSONPath: .spec.service
+{{ end -}}

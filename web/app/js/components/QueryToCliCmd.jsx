@@ -46,8 +46,6 @@ class QueryToCliCmd extends React.Component {
           Current {_startCase(cmdName)} query
         </Typography>
 
-        <br />
-
         <code>
           linkerd {this.props.cmdName} {resource}
           { displayOrder(cmdName, query).map(item => {

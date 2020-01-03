@@ -45,7 +45,6 @@ class Accordion extends React.Component {
         {
           panels.map(panel => (
             <ExpansionPanel
-              elevation={3}
               expanded={expanded === panel.id}
               onChange={this.handlePanelSelect(panel.id)}
               key={panel.id}>

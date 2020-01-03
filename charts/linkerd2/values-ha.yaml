@@ -2,65 +2,65 @@
 # Usage:
 #   helm install -f values.yaml -f values-ha.yaml
 
-enablePodAntiAffinity: true
+EnablePodAntiAffinity: true
 
 # controller configuration
-controllerReplicas: 3
-controllerResources: &controller_resources
-  cpu: &controller_resources_cpu
-    limit: "1"
-    request: 100m
-  memory:
-    limit: 250Mi
-    request: 50Mi
-destinationResources: *controller_resources
-publicAPIResources: *controller_resources
+ControllerReplicas: 3
+ControllerResources: &controller_resources
+  CPU: &controller_resources_cpu
+    Limit: "1"
+    Request: 100m
+  Memory:
+    Limit: 250Mi
+    Request: 50Mi
+DestinationResources: *controller_resources
+PublicAPIResources: *controller_resources
 
 # identity configuration
-identityResources:
-  cpu: *controller_resources_cpu
-  memory:
-    limit: 250Mi
-    request: 10Mi
+IdentityResources:
+  CPU: *controller_resources_cpu
+  Memory:
+    Limit: 250Mi
+    Request: 10Mi
 
 # grafana configuration
-grafanaResources:
-  cpu: *controller_resources_cpu
-  memory:
-    limit: 1024Mi
-    request: 50Mi
+GrafanaResources:
+  CPU: *controller_resources_cpu
+  Memory:
+    Limit: 1024Mi
+    Request: 50Mi
 
 # heartbeat configuration
-heartbeatResources: *controller_resources
+HeartbeatResources: *controller_resources
 
 # prometheus configuration
-prometheusResources:
-  cpu:
-    limit: "4"
-    request: 300m
-  memory:
-    limit: 8192Mi
-    request: 300Mi
+PrometheusResources:
+  CPU:
+    Limit: "4"
+    Request: 300m
+  Memory:
+    Limit: 8192Mi
+    Request: 300Mi
 
 # proxy configuration
-proxy:
-  resources:
-    cpu:
-      limit: "1"
-      request: 100m
-    memory:
-      limit: 250Mi
-      request: 20Mi
+Proxy:
+  Resources:
+    CPU:
+      Limit: "1"
+      Request: 100m
+    Memory:
+      Limit: 250Mi
+      Request: 20Mi
 
 # proxy injector configuration
-proxyInjectorResources: *controller_resources
-webhookFailurePolicy: Fail
+ProxyInjectorResources: *controller_resources
+WebhookFailurePolicy: Fail
 
 # service profile validator configuration
-spValidatorResources: *controller_resources
+SPValidatorResources: *controller_resources
 
 # tap configuration
-tapResources: *controller_resources
+TapResources: *controller_resources
 
 # web configuration
-webResources: *controller_resources
+WebResources: *controller_resources

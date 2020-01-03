@@ -1,3 +1,4 @@
+{{with .Values -}}
 ---
 ###
 ### Service Profile CRD
@@ -8,9 +9,9 @@ kind: CustomResourceDefinition
 metadata:
   name: serviceprofiles.linkerd.io
   annotations:
-    {{.Values.createdByAnnotation}}: {{default (printf "linkerd/helm %s" .Values.linkerdVersion) .Values.cliVersion}}
+    {{.CreatedByAnnotation}}: {{default (printf "linkerd/helm %s" .LinkerdVersion) .CliVersion}}
   labels:
-    {{.Values.controllerNamespaceLabel}}: {{.Values.namespace}}
+    {{.ControllerNamespaceLabel}}: {{.Namespace}}
 spec:
   group: linkerd.io
   versions:
@@ -27,3 +28,4 @@ spec:
     kind: ServiceProfile
     shortNames:
     - sp
+{{ end -}}

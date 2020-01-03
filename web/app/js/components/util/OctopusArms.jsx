@@ -4,8 +4,10 @@ import grey from '@material-ui/core/colors/grey';
 const strokeOpacity = "0.7";
 const arrowColor = grey[500];
 
+export const baseHeight = 220; // the height of the neighbor node box
+const halfBoxHeight = baseHeight / 2;
 const controlPoint = 10; // width and height of the control points for the bezier curves
-export const inboundAlignment = controlPoint * 2;
+const inboundAlignment = controlPoint * 2;
 
 const generateSvgComponents = (y1, width, height) => {
   let segmentWidth = width / 2 - controlPoint; // width of each horizontal arrow segment
@@ -69,15 +71,15 @@ const arrowG = (id, arm, transform) => {
   );
 };
 
-const up = (width, svgHeight, arrowHeight, isOutbound) => {
-  let height = arrowHeight;
+const up = (width, svgHeight, arrowHeight, isOutbound, isEven) => {
+  let height = arrowHeight + (isEven ? 0 : halfBoxHeight);
 
   // up arrows start and the center of the middle node for outbound arms,
   // and at the noce position for inbound arms
   let y1 = isOutbound ? svgHeight / 2 : arrowHeight;
   let arm = generateSvgComponents(y1, width, height);
 
-  let translate = isOutbound ? null : `translate(0, ${svgHeight / 2 + inboundAlignment})`;
+  let translate = isOutbound ? null : `translate(0, ${svgHeight / 2 + (isEven ? 0 : halfBoxHeight) + inboundAlignment})`;
 
   return arrowG(`up-arrow-${height}`, arm, translate);
 };
@@ -99,18 +101,18 @@ const flat = (width, height) => {
   );
 };
 
-const down = (width, svgHeight, arrowHeight, isOutbound, elementHeight) => {
+const down = (width, svgHeight, arrowHeight, isOutbound) => {
   // down outbound arrows start at the middle of the svg's height, and
   // have end of block n at (1/2 block height) + (block height * n-1)
   let height = (svgHeight / 2) - arrowHeight;
 
   // inbound arrows start at the offset of the card, and end in the center of the middle card
   // outbound arrows start in the center of the middle card, and end at the card's height
-  let y1 = isOutbound ? svgHeight / 2 : elementHeight / 2;
+  let y1 = isOutbound ? svgHeight / 2 : halfBoxHeight;
 
   let arm = generateSvgComponents(y1, width, height);
 
-  let translate = `translate(0, ${isOutbound ? svgHeight : svgHeight / 2 - height + elementHeight / 2 - inboundAlignment})`;
+  let translate = `translate(0, ${isOutbound ? svgHeight : svgHeight / 2 - height + halfBoxHeight - inboundAlignment})`;
   let reflect = "scale(1, -1)";
   let transform = `${translate} ${reflect}`;
 

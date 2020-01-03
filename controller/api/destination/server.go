@@ -22,7 +22,6 @@ type (
 		endpoints     *watcher.EndpointsWatcher
 		profiles      *watcher.ProfileWatcher
 		trafficSplits *watcher.TrafficSplitWatcher
-		ips           *watcher.IPWatcher
 
 		enableH2Upgrade     bool
 		controllerNS        string
@@ -62,13 +61,11 @@ func NewServer(
 	endpoints := watcher.NewEndpointsWatcher(k8sAPI, log)
 	profiles := watcher.NewProfileWatcher(k8sAPI, log)
 	trafficSplits := watcher.NewTrafficSplitWatcher(k8sAPI, log)
-	ips := watcher.NewIPWatcher(k8sAPI, endpoints, log)
 
 	srv := server{
 		endpoints,
 		profiles,
 		trafficSplits,
-		ips,
 		enableH2Upgrade,
 		controllerNS,
 		identityTrustDomain,
@@ -91,15 +88,6 @@ func (s *server) Get(dest *pb.GetDestination, stream pb.Destination_GetServer) e
 	}
 	log.Debugf("Get %s", dest.GetPath())
 
-	translator := newEndpointTranslator(
-		s.controllerNS,
-		s.identityTrustDomain,
-		s.enableH2Upgrade,
-		dest.GetPath(),
-		stream,
-		log,
-	)
-
 	// The host must be fully-qualified or be an IP address.
 	host, port, err := getHostAndPort(dest.GetPath())
 	if err != nil {
@@ -108,32 +96,36 @@ func (s *server) Get(dest *pb.GetDestination, stream pb.Destination_GetServer) e
 	}
 
 	if ip := net.ParseIP(host); ip != nil {
-		err := s.ips.Subscribe(host, port, translator)
-		if err != nil {
-			log.Errorf("Failed to subscribe to %s: %s", dest.GetPath(), err)
-			return err
-		}
-		defer s.ips.Unsubscribe(host, port, translator)
+		// TODO handle lookup by IP address
+		log.Debug("Lookup of IP addresses is not yet supported")
+		return status.Errorf(codes.InvalidArgument, "Cannot resolve IP addresses")
+	}
 
-	} else {
+	service, instanceID, err := parseK8sServiceName(host, s.clusterDomain)
+	if err != nil {
+		log.Debugf("Invalid service %s", dest.GetPath())
+		return status.Errorf(codes.InvalidArgument, "Invalid authority: %s", dest.GetPath())
+	}
 
-		service, instanceID, err := parseK8sServiceName(host, s.clusterDomain)
-		if err != nil {
+	translator := newEndpointTranslator(
+		s.controllerNS,
+		s.identityTrustDomain,
+		s.enableH2Upgrade,
+		service,
+		stream,
+		log,
+	)
+
+	err = s.endpoints.Subscribe(service, port, instanceID, translator)
+	if err != nil {
+		if _, ok := err.(watcher.InvalidService); ok {
 			log.Debugf("Invalid service %s", dest.GetPath())
 			return status.Errorf(codes.InvalidArgument, "Invalid authority: %s", dest.GetPath())
 		}
-
-		err = s.endpoints.Subscribe(service, port, instanceID, translator)
-		if err != nil {
-			if _, ok := err.(watcher.InvalidService); ok {
-				log.Debugf("Invalid service %s", dest.GetPath())
-				return status.Errorf(codes.InvalidArgument, "Invalid authority: %s", dest.GetPath())
-			}
-			log.Errorf("Failed to subscribe to %s: %s", dest.GetPath(), err)
-			return err
-		}
-		defer s.endpoints.Unsubscribe(service, port, instanceID, translator)
+		log.Errorf("Failed to subscribe to %s: %s", dest.GetPath(), err)
+		return err
 	}
+	defer s.endpoints.Unsubscribe(service, port, instanceID, translator)
 
 	select {
 	case <-s.shutdown:

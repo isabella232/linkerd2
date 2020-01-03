@@ -1,9 +1,9 @@
-import { cronJobIcon, daemonsetIcon, deploymentIcon, githubIcon, jobIcon, linkerdWordLogo, namespaceIcon, podIcon, replicaSetIcon, slackIcon, statefulSetIcon } from './util/SvgWrappers.jsx';
-import { handlePageVisibility, withPageVisibility } from './util/PageVisibility.jsx';
+import { daemonsetIcon, deploymentIcon, githubIcon, jobIcon, linkerdWordLogo, namespaceIcon, podIcon, replicaSetIcon, slackIcon, statefulSetIcon } from './util/SvgWrappers.jsx';
 import AppBar from '@material-ui/core/AppBar';
-import Autocomplete from '@material-ui/lab/Autocomplete';
+import ArrowDropDownIcon from '@material-ui/icons/ArrowDropDown';
 import Badge from '@material-ui/core/Badge';
 import BreadcrumbHeader from './BreadcrumbHeader.jsx';
+import Button from '@material-ui/core/Button';
 import Divider from '@material-ui/core/Divider';
 import Drawer from '@material-ui/core/Drawer';
 import EmailIcon from '@material-ui/icons/Email';
@@ -14,13 +14,13 @@ import LibraryBooksIcon from '@material-ui/icons/LibraryBooks';
 import { Link } from 'react-router-dom';
 import ListItemIcon from '@material-ui/core/ListItemIcon';
 import ListItemText from '@material-ui/core/ListItemText';
+import Menu from '@material-ui/core/Menu';
 import MenuItem from '@material-ui/core/MenuItem';
 import MenuList from '@material-ui/core/MenuList';
 import NamespaceConfirmationModal from './NamespaceConfirmationModal.jsx';
 import PropTypes from 'prop-types';
 import React from 'react';
 import ReactRouterPropTypes from 'react-router-prop-types';
-import TextField from '@material-ui/core/TextField';
 import Toolbar from '@material-ui/core/Toolbar';
 import Typography from '@material-ui/core/Typography';
 import Version from './Version.jsx';
@@ -35,7 +35,6 @@ import { faSmile } from '@fortawesome/free-regular-svg-icons/faSmile';
 import { faStream } from '@fortawesome/free-solid-svg-icons/faStream';
 import grey from '@material-ui/core/colors/grey';
 import { processSingleResourceRollup } from './util/MetricUtils.jsx';
-import { regexFilterString } from './util/Utils.js';
 import { withContext } from './util/AppContext.jsx';
 import { withStyles } from '@material-ui/core/styles';
 import yellow from '@material-ui/core/colors/yellow';
@@ -45,9 +44,9 @@ const localStorageKey = "linkerd-updates-last-clicked";
 const minBrowserWidth = 960;
 
 const styles = theme => {
-  const drawerWidth = theme.spacing(36);
-  const navLogoWidth = theme.spacing(22.5);
-  const contentPadding = theme.spacing(3);
+  const drawerWidth = theme.spacing.unit * 38;
+  const navLogoWidth = theme.spacing.unit * 22.5;
+  const contentPadding = theme.spacing.unit * 3;
 
   const enteringFn = prop => theme.transitions.create(prop, {
     easing: theme.transitions.easing.sharp,
@@ -74,7 +73,7 @@ const styles = theme => {
     bars: {
       color: 'white',
       position: "fixed",
-      left: theme.spacing(2.5),
+      left: theme.spacing.unit * 2.5,
     },
     breadcrumbs: {
       color: 'white',
@@ -84,14 +83,11 @@ const styles = theme => {
       width: drawerWidth,
       transition: entering,
     },
-    drawerPaper: {
-      width: 'inherit',
-    },
     toolbar: theme.mixins.toolbar,
     navToolbar: {
       display: 'flex',
       alignItems: 'center',
-      padding: `0 0 0 ${theme.spacing(2)}px`,
+      padding: `0 0 0 ${theme.spacing.unit*2}px`,
       boxShadow: theme.shadows[4], // to match elevation == 4 on main AppBar
       ...theme.mixins.toolbar,
       backgroundColor: theme.palette.primary.main,
@@ -112,40 +108,16 @@ const styles = theme => {
       width: `${navLogoWidth}px`,
     },
     namespaceChangeButton: {
-      borderRadius: "5px",
-      backgroundColor: grey[400],
       marginLeft: `${drawerWidth * .075}px`,
-      marginRight: `${drawerWidth * .075}px`,
       marginTop: "11px",
-      width: `${drawerWidth * .85}px`,
-    },
-    namespaceChangeButtonInputRoot: {
-      backgroundColor: grey[300],
-      boxShadow: "rgba(0, 0, 0, 0.2) 0px 3px 1px -2px, rgba(0, 0, 0, 0.14) 0px 2px 2px 0px, rgba(0, 0, 0, 0.12) 0px 1px 5px 0px",
-      padding: "4px 12px !important",
-      border: 0,
-      "&:hover": {
-        borderColor: "transparent",
-      },
-    },
-    namespaceChangeButtonInput: {
-      textAlign: "center",
-    },
-    namespaceChangeButtonInputFocused: {
-      textAlign: "center",
-    },
-    namespaceChangeButtonPopupIndicator: {
-      backgroundColor: "transparent",
-      "&:hover": {
-        backgroundColor: "transparent",
-      }
+      width: `${drawerWidth * .8}px`,
     },
     navMenuItem: {
       paddingLeft: `${contentPadding}px`,
       paddingRight: `${contentPadding}px`,
     },
     shrinkIcon: {
-      fontSize: "24px",
+      fontSize: "19px",
       paddingLeft: "3px",
       paddingRight: "3px",
     },
@@ -166,9 +138,6 @@ const styles = theme => {
     },
     badge: {
       backgroundColor: yellow[500],
-    },
-    inputBase: {
-      boxSizing: "border-box",
     }
   };
 };
@@ -181,10 +150,8 @@ class NavigationBase extends React.Component {
     this.handleConfirmNamespaceChange = this.handleConfirmNamespaceChange.bind(this);
     this.handleCommunityClick = this.handleCommunityClick.bind(this);
     this.handleDialogCancel = this.handleDialogCancel.bind(this);
-    this.handleFilterInputChange = this.handleFilterInputChange.bind(this);
     this.handleNamespaceMenuClick = this.handleNamespaceMenuClick.bind(this);
     this.updateWindowDimensions = this.updateWindowDimensions.bind(this);
-    this.handleAutocompleteClick = this.handleAutocompleteClick.bind(this);
 
     this.state = this.getInitialState();
     this.loadFromServer = this.loadFromServer.bind(this);
@@ -192,9 +159,10 @@ class NavigationBase extends React.Component {
 
   getInitialState() {
     return {
+      anchorEl: null,
       mobileSidebarOpen: false,
+      namespaceMenuOpen: false,
       newNamespace: '',
-      formattedNamespaceFilter: '',
       hideUpdateBadge: true,
       latestVersion: '',
       isLatest: true,
@@ -208,40 +176,24 @@ class NavigationBase extends React.Component {
   }
 
   componentDidMount() {
-    this.startServerPolling();
+    this.loadFromServer();
+    this.timerId = window.setInterval(this.loadFromServer, this.state.pollingInterval);
     this.fetchVersion();
     this.fetchLatestCommunityUpdate();
     this.updateWindowDimensions();
     window.addEventListener("resize", this.updateWindowDimensions);
   }
 
-  componentDidUpdate(prevProps) {
+  componentWillUpdate() {
     if (this.props.history) {
       this.props.checkNamespaceMatch(this.props.history.location.pathname);
     }
-
-    handlePageVisibility({
-      prevVisibilityState: prevProps.isPageVisible,
-      currentVisibilityState: this.props.isPageVisible,
-      onVisible: () => this.startServerPolling(),
-      onHidden: () => this.stopServerPolling(),
-    });
   }
 
   componentWillUnmount() {
     window.removeEventListener("resize", this.updateWindowDimensions);
-    this.stopServerPolling();
-  }
-
-  startServerPolling() {
-    this.loadFromServer();
-    this.timerId = window.setInterval(this.loadFromServer, this.state.pollingInterval);
-  }
-
-  stopServerPolling() {
     window.clearInterval(this.timerId);
     this.api.cancelCurrentRequests();
-    this.setState({ pendingRequests: false });
   }
 
   // API returns namespaces for namespace select button. No metrics returned.
@@ -259,9 +211,7 @@ class NavigationBase extends React.Component {
 
     Promise.all(this.api.getCurrentPromises())
       .then(([allNs]) => {
-        // add "All Namespaces" to the options
-        let namespaces = [{name:"_all", key:"ns-all"}];
-        namespaces = namespaces.concat(processSingleResourceRollup(allNs));
+        let namespaces = processSingleResourceRollup(allNs);
         this.setState({
           namespaces,
           pendingRequests: false,
@@ -347,20 +297,10 @@ class NavigationBase extends React.Component {
     this.props.history.push(`/namespaces/${this.state.newNamespace}`);
   }
 
-  handleFilterInputChange = event => {
-    this.setState({
-      formattedNamespaceFilter: regexFilterString(event.target.value) });
-  }
-
-  handleAutocompleteClick = event => {
-    // This is necessary for the mobile sidebar, otherwise the sidebar
-    // would close upon click of the namespace change input.
+  handleNamespaceChange = (event, namespace) => {
+    // ensure that mobile drawer will not close on click
     event.stopPropagation();
-  }
-
-  handleNamespaceChange = (event, values) => {
-    //event.stopPropagation();
-    let namespace = values.name;
+    this.setState({ namespaceMenuOpen: false });
     if (namespace === this.props.selectedNamespace) {
       return;
     }
@@ -385,7 +325,8 @@ class NavigationBase extends React.Component {
   handleNamespaceMenuClick = event => {
     // ensure that mobile drawer will not close on click
     event.stopPropagation();
-    this.setState({formattedNamespaceFilter: '' });
+    this.setState({ anchorEl: event.currentTarget });
+    this.setState(state => ({ namespaceMenuOpen: !state.namespaceMenuOpen }));
   }
 
   menuItem(path, title, icon, onClick) {
@@ -415,11 +356,7 @@ class NavigationBase extends React.Component {
 
   render() {
     const { api, classes, selectedNamespace, ChildComponent, ...otherProps } = this.props;
-    let { namespaces, formattedNamespaceFilter,
-      showNamespaceChangeDialog, newNamespace, mobileSidebarOpen } = this.state;
-    namespaces = namespaces.filter(ns => {
-      return ns.name.match(formattedNamespaceFilter);
-    });
+    const { namespaces, anchorEl, showNamespaceChangeDialog, newNamespace, mobileSidebarOpen } = this.state;
     let formattedNamespaceName = selectedNamespace;
     if (formattedNamespaceName === "_all") {
       formattedNamespaceName = "All Namespaces";
@@ -436,9 +373,10 @@ class NavigationBase extends React.Component {
         }
         <Divider />
         <MenuList>
-          <Typography variant="button" component="div" className={classes.sidebarHeading}>
+          <Typography variant="button" className={classes.sidebarHeading}>
                 Cluster
           </Typography>
+
           { this.menuItem("/namespaces", "Namespaces", namespaceIcon) }
 
 
@@ -449,44 +387,49 @@ class NavigationBase extends React.Component {
 
         <Divider />
 
-        <Autocomplete
-          id="namespace-autocomplete"
-          onClick={this.handleAutocompleteClick}
-          disableClearable={true}
-          value={{name:formattedNamespaceName.toUpperCase()}}
-          options={namespaces}
-          autoSelect={true}
-          getOptionLabel={option => { if (option.name !== "_all") {return option.name;} else {return "All Namespaces";}}}
-          onChange={this.handleNamespaceChange}
-          size="small"
-          classes={{
-            root: classes.namespaceChangeButton,
-            inputRoot: classes.namespaceChangeButtonInputRoot,
-            input: classes.namespaceChangeButtonInput,
-            popupIndicator: classes.namespaceChangeButtonPopupIndicator,
-          }}
-          className={classes.namespaceChangeButton}
-          renderInput={params => (
-            <TextField
-              {...params}
-              key={params.name}
-              variant="outlined"
-              fullWidth />
-              )} />
+        <MenuList>
+          <Button
+            variant="contained"
+            className={classes.namespaceChangeButton}
+            size="large"
+            onClick={this.handleNamespaceMenuClick}>
+            { formattedNamespaceName }
+            <ArrowDropDownIcon />
+          </Button>
+          <Menu
+            anchorEl={anchorEl}
+            open={this.state.namespaceMenuOpen}
+            keepMounted
+            onClose={this.handleNamespaceMenuClick}>
+            <MenuItem
+              value="all"
+              onClick={e => this.handleNamespaceChange(e, "_all")}>
+                  All Namespaces
+            </MenuItem>
 
-        <NamespaceConfirmationModal
-          open={showNamespaceChangeDialog}
-          selectedNamespace={selectedNamespace}
-          newNamespace={newNamespace}
-          handleDialogCancel={this.handleDialogCancel}
-          handleConfirmNamespaceChange={this.handleConfirmNamespaceChange} />
+            <Divider />
+
+            {namespaces.map(ns => (
+              <MenuItem
+                onClick={e => this.handleNamespaceChange(e, ns.name)}
+                key={ns.name}>
+                {ns.name}
+              </MenuItem>
+              ))}
+          </Menu>
+          <NamespaceConfirmationModal
+            open={showNamespaceChangeDialog}
+            selectedNamespace={selectedNamespace}
+            newNamespace={newNamespace}
+            handleDialogCancel={this.handleDialogCancel}
+            handleConfirmNamespaceChange={this.handleConfirmNamespaceChange} />
+
+        </MenuList>
 
         <MenuList>
-          <Typography variant="button" component="div" className={classes.sidebarHeading}>
+          <Typography variant="button" className={classes.sidebarHeading}>
                 Workloads
           </Typography>
-
-          { this.menuItem(`/namespaces/${selectedNamespace}/cronjobs`, "Cron Jobs", cronJobIcon) }
 
           { this.menuItem(`/namespaces/${selectedNamespace}/daemonsets`, "Daemon Sets", daemonsetIcon) }
 
@@ -496,15 +439,13 @@ class NavigationBase extends React.Component {
 
           { this.menuItem(`/namespaces/${selectedNamespace}/pods`, "Pods", podIcon) }
 
-          { this.menuItem(`/namespaces/${selectedNamespace}/replicasets`, "Replica Sets", replicaSetIcon) }
-
           { this.menuItem(`/namespaces/${selectedNamespace}/replicationcontrollers`, "Replication Controllers", replicaSetIcon) }
 
           { this.menuItem(`/namespaces/${selectedNamespace}/statefulsets`, "Stateful Sets", statefulSetIcon) }
         </MenuList>
 
         <MenuList>
-          <Typography variant="button" component="div" className={classes.sidebarHeading}>
+          <Typography variant="button" className={classes.sidebarHeading}>
                 Configuration
           </Typography>
 
@@ -513,7 +454,7 @@ class NavigationBase extends React.Component {
         </MenuList>
         <Divider />
         <MenuList >
-          <Typography variant="button" component="div" className={classes.sidebarHeading}>
+          <Typography variant="button" className={classes.sidebarHeading}>
                 Tools
           </Typography>
 
@@ -575,7 +516,6 @@ class NavigationBase extends React.Component {
         <Hidden smDown>
           <Drawer
             className={classes.drawer}
-            classes={{ paper: classes.drawerPaper }}
             variant="permanent">
             {drawer}
           </Drawer>
@@ -605,7 +545,6 @@ class NavigationBase extends React.Component {
           </AppBar>
           <Drawer
             className={classes.drawer}
-            classes={{ paper: classes.drawerPaper }}
             variant="temporary"
             onClick={this.handleDrawerClick}
             onClose={this.handleDrawerClick}
@@ -627,12 +566,8 @@ class NavigationBase extends React.Component {
 
 NavigationBase.propTypes = {
   api: PropTypes.shape({}).isRequired,
-  ChildComponent: PropTypes.oneOfType([
-    PropTypes.func,
-    PropTypes.object,
-  ]).isRequired,
+  ChildComponent: PropTypes.func.isRequired,
   classes: PropTypes.shape({}).isRequired,
-  isPageVisible: PropTypes.bool.isRequired,
   location: ReactRouterPropTypes.location.isRequired,
   pathPrefix: PropTypes.string.isRequired,
   releaseVersion: PropTypes.string.isRequired,
@@ -640,4 +575,4 @@ NavigationBase.propTypes = {
   uuid: PropTypes.string.isRequired,
 };
 
-export default withPageVisibility(withContext(withStyles(styles, { withTheme: true })(NavigationBase)));
+export default withContext(withStyles(styles, { withTheme: true })(NavigationBase));

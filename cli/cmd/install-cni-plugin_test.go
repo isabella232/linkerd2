@@ -8,12 +8,13 @@ import (
 
 func TestRenderCNIPlugin(t *testing.T) {
 	defaultControlPlaneNamespace := controlPlaneNamespace
-	defaultOptions, err := newCNIInstallOptionsWithDefaults()
+	defaultOptions := newCNIPluginOptions()
+	defaultConfig, err := validateAndBuildCNIConfig(defaultOptions)
 	if err != nil {
-		t.Fatalf("Unexpected error from newCNIInstallOptionsWithDefaults(): %v", err)
+		t.Fatalf("Unexpected error from validateAndBuildCNIConfig(): %v", err)
 	}
 
-	fullyConfiguredOptions := &cniPluginOptions{
+	fullyConfiguredOptions := cniPluginOptions{
 		linkerdVersion:      "awesome-linkerd-version.1",
 		dockerRegistry:      "gcr.io/linkerd-io",
 		proxyControlPort:    5190,
@@ -28,10 +29,13 @@ func TestRenderCNIPlugin(t *testing.T) {
 		destCNINetDir:       "/etc/kubernetes/cni/net.d",
 		destCNIBinDir:       "/opt/my-cni/bin",
 	}
+	fullyConfiguredConfig, err := validateAndBuildCNIConfig(&fullyConfiguredOptions)
+	if err != nil {
+		t.Fatalf("Unexpected error from validateAndBuildCNIConfig(): %v", err)
+	}
+	fullyConfiguredConfig.Namespace = "other"
 
-	otherNamespace := "other"
-
-	fullyConfiguredOptionsEqualDsts := &cniPluginOptions{
+	fullyConfiguredOptionsEqualDsts := cniPluginOptions{
 		linkerdVersion:      "awesome-linkerd-version.1",
 		dockerRegistry:      "gcr.io/linkerd-io",
 		proxyControlPort:    5190,
@@ -46,15 +50,20 @@ func TestRenderCNIPlugin(t *testing.T) {
 		destCNINetDir:       "/etc/kubernetes/cni/net.d",
 		destCNIBinDir:       "/etc/kubernetes/cni/net.d",
 	}
+	fullyConfiguredConfigEqualDsts, err := validateAndBuildCNIConfig(&fullyConfiguredOptionsEqualDsts)
+	if err != nil {
+		t.Fatalf("Unexpected error from validateAndBuildCNIConfig(): %v", err)
+	}
+	fullyConfiguredConfigEqualDsts.Namespace = "other"
 
 	testCases := []struct {
-		*cniPluginOptions
+		*installCNIPluginConfig
 		namespace      string
 		goldenFileName string
 	}{
-		{defaultOptions, defaultControlPlaneNamespace, "install-cni-plugin_default.golden"},
-		{fullyConfiguredOptions, otherNamespace, "install-cni-plugin_fully_configured.golden"},
-		{fullyConfiguredOptionsEqualDsts, otherNamespace, "install-cni-plugin_fully_configured_equal_dsts.golden"},
+		{defaultConfig, defaultControlPlaneNamespace, "install-cni-plugin_default.golden"},
+		{fullyConfiguredConfig, fullyConfiguredConfig.Namespace, "install-cni-plugin_fully_configured.golden"},
+		{fullyConfiguredConfigEqualDsts, fullyConfiguredConfigEqualDsts.Namespace, "install-cni-plugin_fully_configured_equal_dsts.golden"},
 	}
 
 	for i, tc := range testCases {
@@ -64,7 +73,7 @@ func TestRenderCNIPlugin(t *testing.T) {
 			controlPlaneNamespace = tc.namespace
 
 			var buf bytes.Buffer
-			err := renderCNIPlugin(&buf, tc.cniPluginOptions)
+			err := renderCNIPlugin(&buf, tc.installCNIPluginConfig)
 			if err != nil {
 				t.Fatalf("Unexpected error: %v", err)
 			}

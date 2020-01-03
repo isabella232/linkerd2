@@ -73,19 +73,14 @@ class BreadcrumbHeader extends React.Component {
     }
   }
 
-  renderBreadcrumbSegment(segment, numCrumbs, index) {
+  renderBreadcrumbSegment(segment, shouldPluralizeFirstSegment) {
     let isMeshResource = isResource(segment);
 
     if (isMeshResource) {
-      if (numCrumbs === 1 || index !== 0) {
-        // If the segment is a K8s resource type, it should be pluralized if
-        // the complete breadcrumb group describes a single-word list of
-        // resources ("Namespaces") OR if the breadcrumb group describes a list
-        // of resources within a specific namespace ("Namespace > linkerd >
-        // Deployments")
-        return this.segmentToFriendlyTitle(segment, true);
+      if (!shouldPluralizeFirstSegment) {
+        return friendlyTitle(segment).singular;
       }
-      return friendlyTitle(segment).singular;
+      return this.segmentToFriendlyTitle(segment, true);
     }
     return this.segmentToFriendlyTitle(segment, false);
   }
@@ -93,11 +88,12 @@ class BreadcrumbHeader extends React.Component {
   render() {
     let prefix = this.props.pathPrefix;
     let breadcrumbs = this.convertURLToBreadcrumbs(this.props.location.pathname.replace(prefix, ""));
+    let shouldPluralizeFirstSegment = breadcrumbs.length === 1;
 
     return breadcrumbs.map((pathSegment, index) => {
       return (
         <span key={pathSegment.segment}>
-          {this.renderBreadcrumbSegment(pathSegment.segment, breadcrumbs.length, index)}
+          {this.renderBreadcrumbSegment(pathSegment.segment, shouldPluralizeFirstSegment && index === 0)}
           { index < breadcrumbs.length - 1 ? " > " : null }
         </span>
       );

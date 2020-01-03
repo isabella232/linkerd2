@@ -29,13 +29,13 @@ func addressString(address Address) string {
 }
 
 func (bel *bufferingEndpointListener) Add(set PodSet) {
-	for _, address := range set.Pods {
+	for _, address := range set {
 		bel.added = append(bel.added, addressString(address))
 	}
 }
 
 func (bel *bufferingEndpointListener) Remove(set PodSet) {
-	for _, address := range set.Pods {
+	for _, address := range set {
 		bel.removed = append(bel.removed, addressString(address))
 	}
 }

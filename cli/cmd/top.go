@@ -21,6 +21,7 @@ import (
 	termbox "github.com/nsf/termbox-go"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
+	"google.golang.org/grpc/codes"
 )
 
 type topOptions struct {
@@ -283,21 +284,26 @@ func newCmdTop() *cobra.Command {
   (TYPE [NAME] | TYPE/NAME)
 
   Examples:
+  * cronjob/my-cronjob
   * deploy
   * deploy/my-deploy
   * deploy my-deploy
   * ds/my-daemonset
   * job/my-job
   * ns/my-ns
+  * rs
+  * rs/my-replicaset
   * sts
   * sts/my-statefulset
 
   Valid resource types include:
+  * cronjobs
   * daemonsets
   * deployments
   * jobs
   * namespaces
   * pods
+  * replicasets
   * replicationcontrollers
   * statefulsets
   * services (only supported as a --to resource)`,
@@ -534,7 +540,16 @@ func newRow(req topRequest) (tableRow, error) {
 	if success {
 		switch eos := req.rspEnd.GetEos().GetEnd().(type) {
 		case *pb.Eos_GrpcStatusCode:
-			success = eos.GrpcStatusCode == 0
+			switch codes.Code(eos.GrpcStatusCode) {
+			case codes.Unknown,
+				codes.DeadlineExceeded,
+				codes.Internal,
+				codes.Unavailable,
+				codes.DataLoss:
+				success = false
+			default:
+				success = true
+			}
 
 		case *pb.Eos_ResetErrorCode:
 			success = false

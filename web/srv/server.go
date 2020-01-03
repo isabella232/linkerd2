@@ -14,6 +14,7 @@ import (
 	"github.com/linkerd/linkerd2/controller/api/public"
 	pb "github.com/linkerd/linkerd2/controller/gen/public"
 	"github.com/linkerd/linkerd2/pkg/filesonly"
+	"github.com/linkerd/linkerd2/pkg/healthcheck"
 	"github.com/linkerd/linkerd2/pkg/k8s"
 	"github.com/linkerd/linkerd2/pkg/prometheus"
 	log "github.com/sirupsen/logrus"
@@ -43,6 +44,10 @@ type (
 		Error               bool
 		ErrorMessage        string
 		PathPrefix          string
+	}
+
+	healthChecker interface {
+		RunChecks(observer healthcheck.CheckObserver) bool
 	}
 )
 
@@ -79,6 +84,7 @@ func NewServer(
 	reHost *regexp.Regexp,
 	apiClient public.APIClient,
 	k8sAPI *k8s.KubernetesAPI,
+	hc healthChecker,
 ) *http.Server {
 	server := &Server{
 		templateDir: templateDir,
@@ -101,6 +107,7 @@ func NewServer(
 		controllerNamespace: controllerNamespace,
 		clusterDomain:       clusterDomain,
 		grafanaProxy:        newGrafanaProxy(grafanaAddr),
+		hc:                  hc,
 	}
 
 	httpServer := &http.Server{
@@ -123,6 +130,8 @@ func NewServer(
 	server.router.GET("/namespaces/:namespace/deployments", handler.handleIndex)
 	server.router.GET("/namespaces/:namespace/replicationcontrollers", handler.handleIndex)
 	server.router.GET("/namespaces/:namespace/pods", handler.handleIndex)
+	server.router.GET("/namespaces/:namespace/cronjobs", handler.handleIndex)
+	server.router.GET("/namespaces/:namespace/replicasets", handler.handleIndex)
 
 	// legacy paths that are deprecated but should not 404
 	server.router.GET("/overview", handler.handleIndex)
@@ -143,6 +152,8 @@ func NewServer(
 	server.router.GET("/namespaces/:namespace/deployments/:deployment", handler.handleIndex)
 	server.router.GET("/namespaces/:namespace/jobs/:job", handler.handleIndex)
 	server.router.GET("/namespaces/:namespace/replicationcontrollers/:replicationcontroller", handler.handleIndex)
+	server.router.GET("/namespaces/:namespace/cronjobs/:cronjob", handler.handleIndex)
+	server.router.GET("/namespaces/:namespace/replicasets/:replicaset", handler.handleIndex)
 
 	// tools and community paths
 	server.router.GET("/tap", handler.handleIndex)
@@ -165,6 +176,8 @@ func NewServer(
 	server.router.GET("/api/tap", handler.handleAPITap)
 	server.router.GET("/api/routes", handler.handleAPITopRoutes)
 	server.router.GET("/api/edges", handler.handleAPIEdges)
+	server.router.GET("/api/check", handler.handleAPICheck)
+	server.router.GET("/api/resource-definition", handler.handleAPIResourceDefinition)
 
 	// grafana proxy
 	server.router.DELETE("/grafana/*grafanapath", handler.handleGrafana)

@@ -1,8 +1,10 @@
 import { distanceInWordsToNow, subSeconds } from 'date-fns';
+import { handlePageVisibility, withPageVisibility } from './util/PageVisibility.jsx';
 import BaseTable from './BaseTable.jsx';
 import CallToAction from './CallToAction.jsx';
 import Card from '@material-ui/core/Card';
 import CardContent from '@material-ui/core/CardContent';
+import CheckModal from './CheckModal.jsx';
 import ErrorBanner from './ErrorBanner.jsx';
 import Grid from '@material-ui/core/Grid';
 import MeshedStatusTable from './MeshedStatusTable.jsx';
@@ -23,6 +25,13 @@ import _mapKeys from 'lodash/mapKeys';
 import _sumBy from 'lodash/sumBy';
 import { incompleteMeshMessage } from './util/CopyUtils.jsx';
 import { withContext } from './util/AppContext.jsx';
+import { withStyles } from '@material-ui/core/styles';
+
+const styles = {
+  checkModalWrapper: {
+    width: "100%",
+  },
+};
 
 const serviceMeshDetailsColumns = [
   {
@@ -71,7 +80,9 @@ class ServiceMesh extends React.Component {
       setCurrentRequests: PropTypes.func.isRequired,
       urlsForResourceNoStats: PropTypes.func.isRequired,
     }).isRequired,
+    classes: PropTypes.shape({}).isRequired,
     controllerNamespace: PropTypes.string.isRequired,
+    isPageVisible: PropTypes.bool.isRequired,
     productName: PropTypes.string,
     releaseVersion: PropTypes.string.isRequired,
   }
@@ -93,13 +104,20 @@ class ServiceMesh extends React.Component {
   }
 
   componentDidMount() {
-    this.loadFromServer();
-    this.timerId = window.setInterval(this.loadFromServer, this.state.pollingInterval);
+    this.startServerPolling();
+  }
+
+  componentDidUpdate(prevProps) {
+    handlePageVisibility({
+      prevVisibilityState: prevProps.isPageVisible,
+      currentVisibilityState: this.props.isPageVisible,
+      onVisible: () => this.startServerPolling(),
+      onHidden: () => this.stopServerPolling(),
+    });
   }
 
   componentWillUnmount() {
-    window.clearInterval(this.timerId);
-    this.api.cancelCurrentRequests();
+    this.stopServerPolling();
   }
 
   getServiceMeshDetails() {
@@ -131,6 +149,17 @@ class ServiceMesh extends React.Component {
         })
       };
     });
+  }
+
+  startServerPolling() {
+    this.loadFromServer();
+    this.timerId = window.setInterval(this.loadFromServer, this.state.pollingInterval);
+  }
+
+  stopServerPolling() {
+    window.clearInterval(this.timerId);
+    this.api.cancelCurrentRequests();
+    this.setState({ pendingRequests: false });
   }
 
   extractNsStatuses(nsData) {
@@ -252,9 +281,9 @@ class ServiceMesh extends React.Component {
     }
 
     return (
-      <Card>
+      <Card elevation={3}>
         <CardContent>
-          <Typography>{message}</Typography>
+          <Typography variant="body2">{message}</Typography>
           { numUnadded > 0 ? incompleteMeshMessage() : null }
         </CardContent>
       </Card>
@@ -262,6 +291,8 @@ class ServiceMesh extends React.Component {
   }
 
   render() {
+    const { classes } = this.props;
+
     return (
       <div className="page-content">
         { !this.state.error ? null : <ErrorBanner message={this.state.error} /> }
@@ -272,7 +303,7 @@ class ServiceMesh extends React.Component {
                 numResources={this.state.nsStatuses.length}
                 resource="namespace" /> : null}
 
-            <Grid container spacing={24}>
+            <Grid container spacing={3}>
               <Grid item xs={8} container direction="column" >
                 <Grid item>{this.renderControlPlaneDetails()}</Grid>
                 <Grid item>
@@ -280,8 +311,9 @@ class ServiceMesh extends React.Component {
                 </Grid>
               </Grid>
 
-              <Grid item xs={4} container direction="column" spacing={24}>
+              <Grid item xs={4} container direction="column" spacing={3}>
                 <Grid item>{this.renderServiceMeshDetails()}</Grid>
+                <Grid className={classes.checkModalWrapper} item><CheckModal api={this.api} /></Grid>
                 <Grid item>{this.renderAddResourcesMessage()}</Grid>
               </Grid>
             </Grid>
@@ -292,4 +324,4 @@ class ServiceMesh extends React.Component {
   }
 }
 
-export default withContext(ServiceMesh);
+export default withPageVisibility(withStyles(styles)(withContext(ServiceMesh)));

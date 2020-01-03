@@ -21,7 +21,8 @@ import (
 */
 
 var (
-	defaultMetricTimeWindow = "1m"
+	defaultMetricTimeWindow    = "1m"
+	metricTimeWindowLowerBound = time.Second * 15 //the window value needs to equal or larger than that
 
 	// ValidTargets specifies resource types allowed as a target:
 	// target resource on an inbound query
@@ -29,11 +30,13 @@ var (
 	// destination resource on an outbound 'from' query
 	ValidTargets = []string{
 		k8s.Authority,
+		k8s.CronJob,
 		k8s.DaemonSet,
 		k8s.Deployment,
 		k8s.Job,
 		k8s.Namespace,
 		k8s.Pod,
+		k8s.ReplicaSet,
 		k8s.ReplicationController,
 		k8s.StatefulSet,
 	}
@@ -41,11 +44,13 @@ var (
 	// ValidTapDestinations specifies resource types allowed as a tap destination:
 	// destination resource on an outbound 'to' query
 	ValidTapDestinations = []string{
+		k8s.CronJob,
 		k8s.DaemonSet,
 		k8s.Deployment,
 		k8s.Job,
 		k8s.Namespace,
 		k8s.Pod,
+		k8s.ReplicaSet,
 		k8s.ReplicationController,
 		k8s.Service,
 		k8s.StatefulSet,
@@ -145,10 +150,15 @@ func GRPCError(err error) error {
 func BuildStatSummaryRequest(p StatsSummaryRequestParams) (*pb.StatSummaryRequest, error) {
 	window := defaultMetricTimeWindow
 	if p.TimeWindow != "" {
-		_, err := time.ParseDuration(p.TimeWindow)
+		w, err := time.ParseDuration(p.TimeWindow)
 		if err != nil {
 			return nil, err
 		}
+
+		if w < metricTimeWindowLowerBound {
+			return nil, errors.New("metrics time window needs to be at least 15s")
+		}
+
 		window = p.TimeWindow
 	}
 

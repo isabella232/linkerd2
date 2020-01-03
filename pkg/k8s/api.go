@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"time"
 
+	tsclient "github.com/deislabs/smi-sdk-go/pkg/gen/client/split/clientset/versioned"
 	"github.com/linkerd/linkerd2/pkg/prometheus"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -12,6 +13,7 @@ import (
 	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/version"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 
@@ -19,7 +21,7 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 )
 
-var minAPIVersion = [3]int{1, 12, 0}
+var minAPIVersion = [3]int{1, 13, 0}
 
 // KubernetesAPI provides a client for accessing a Kubernetes cluster.
 // TODO: support ServiceProfile ClientSet. A prerequisite is moving the
@@ -30,6 +32,8 @@ type KubernetesAPI struct {
 	*rest.Config
 	kubernetes.Interface
 	Apiextensions apiextensionsclient.Interface // for CRDs
+	TsClient      tsclient.Interface
+	DynamicClient dynamic.Interface
 }
 
 // NewAPI validates a Kubernetes config and returns a client for accessing the
@@ -61,11 +65,21 @@ func NewAPI(configPath, kubeContext string, impersonate string, timeout time.Dur
 	if err != nil {
 		return nil, fmt.Errorf("error configuring Kubernetes API Extensions clientset: %v", err)
 	}
+	tsClient, err := tsclient.NewForConfig(config)
+	if err != nil {
+		return nil, fmt.Errorf("error configuring Traffic Split clientset: %v", err)
+	}
+	dynamicClient, err := dynamic.NewForConfig(config)
+	if err != nil {
+		return nil, fmt.Errorf("error configuring Kubernetes Dynamic Client: %v", err)
+	}
 
 	return &KubernetesAPI{
 		Config:        config,
 		Interface:     clientset,
 		Apiextensions: apiextensions,
+		TsClient:      tsClient,
+		DynamicClient: dynamicClient,
 	}, nil
 }
 

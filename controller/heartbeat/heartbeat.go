@@ -22,11 +22,11 @@ import (
 func K8sValues(kubeAPI *k8s.KubernetesAPI, controlPlaneNamespace string) url.Values {
 	v := url.Values{}
 
-	cm, configPB, err := healthcheck.FetchLinkerdConfigMap(kubeAPI, controlPlaneNamespace)
+	cm, _, err := healthcheck.FetchLinkerdConfigMap(kubeAPI, controlPlaneNamespace)
 	if err != nil {
 		log.Errorf("Failed to fetch linkerd-config: %s", err)
 	} else {
-		v.Set("uuid", configPB.GetInstall().GetUuid())
+		v.Set("uuid", string(cm.GetUID()))
 		v.Set("install-time", strconv.FormatInt(cm.GetCreationTimestamp().Unix(), 10))
 	}
 
@@ -138,9 +138,12 @@ func PromValues(promAPI promv1.API, controlPlaneNamespace string) url.Values {
 func promQuery(promAPI promv1.API, query string, precision int) (string, error) {
 	log.Debugf("Prometheus query: %s", query)
 
-	res, err := promAPI.Query(context.Background(), query, time.Time{})
+	res, warn, err := promAPI.Query(context.Background(), query, time.Time{})
 	if err != nil {
 		return "", err
+	}
+	if warn != nil {
+		log.Warnf("%v", warn)
 	}
 
 	switch result := res.(type) {

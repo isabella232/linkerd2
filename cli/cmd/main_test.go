@@ -14,7 +14,7 @@ var (
 	// updateFixtures is set by the `-update` flag.
 	updateFixtures bool
 
-	// prettyDiff is set by the `-verbose-diff` flag.
+	// prettyDiff is set by the `-pretty-diff` flag.
 	prettyDiff bool
 )
 
@@ -55,7 +55,6 @@ func diffTestdata(t *testing.T, path, actual string) {
 	if actual == expected {
 		return
 	}
-
 	dmp := diffmatchpatch.New()
 	diffs := dmp.DiffMain(expected, actual, true)
 	diffs = dmp.DiffCleanupSemantic(diffs)

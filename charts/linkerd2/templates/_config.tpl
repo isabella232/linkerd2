@@ -1,36 +1,36 @@
 {{- define "linkerd.configs.global" -}}
 {
-  "linkerdNamespace": "{{.Namespace}}",
+  "linkerdNamespace": "{{.Values.namespace}}",
   "cniEnabled": false,
-  "version": "{{.LinkerdVersion}}",
+  "version": "{{.Values.linkerdVersion}}",
   "identityContext":{
-    "trustDomain": "{{.Identity.TrustDomain}}",
-    "trustAnchorsPem": "{{required "Please provide the identity trust anchors" .Identity.TrustAnchorsPEM | trim | replace "\n" "\\n"}}",
-    "issuanceLifeTime": "{{.Identity.Issuer.IssuanceLifeTime}}",
-    "clockSkewAllowance": "{{.Identity.Issuer.ClockSkewAllowance}}",
-    "scheme": "{{.Identity.Issuer.Scheme}}"
+    "trustDomain": "{{.Values.identity.trustDomain}}",
+    "trustAnchorsPem": "{{required "Please provide the identity trust anchors" .Values.identity.trustAnchorsPEM | trim | replace "\n" "\\n"}}",
+    "issuanceLifeTime": "{{.Values.identity.issuer.issuanceLifeTime}}",
+    "clockSkewAllowance": "{{.Values.identity.issuer.clockSkewAllowance}}",
+    "scheme": "{{.Values.identity.issuer.scheme}}"
   },
   "autoInjectContext": null,
-  "omitWebhookSideEffects": {{.OmitWebhookSideEffects}},
-  "clusterDomain": "{{.ClusterDomain}}"
+  "omitWebhookSideEffects": {{.Values.omitWebhookSideEffects}},
+  "clusterDomain": "{{.Values.clusterDomain}}"
 }
 {{- end -}}
 
 {{- define "linkerd.configs.proxy" -}}
 {
   "proxyImage":{
-    "imageName":"{{.Proxy.Image.Name}}",
-    "pullPolicy":"{{.Proxy.Image.PullPolicy}}"
+    "imageName":"{{.Values.proxy.image.name}}",
+    "pullPolicy":"{{.Values.proxy.image.pullPolicy}}"
   },
   "proxyInitImage":{
-    "imageName":"{{.ProxyInit.Image.Name}}",
-    "pullPolicy":"{{.ProxyInit.Image.PullPolicy}}"
+    "imageName":"{{.Values.proxyInit.image.name}}",
+    "pullPolicy":"{{.Values.proxyInit.image.pullPolicy}}"
   },
   "controlPort":{
-    "port": {{.Proxy.Ports.Control}}
+    "port": {{.Values.proxy.ports.control}}
   },
   "ignoreInboundPorts":[
-    {{- $ports := splitList "," .ProxyInit.IgnoreInboundPorts -}}
+    {{- $ports := splitList "," .Values.proxyInit.ignoreInboundPorts -}}
     {{- if gt (len $ports) 1}}
     {{- $last := sub (len $ports) 1 -}}
     {{- range $i,$port := $ports -}}
@@ -39,7 +39,7 @@
     {{- end -}}
   ],
   "ignoreOutboundPorts":[
-    {{- $ports := splitList "," .ProxyInit.IgnoreOutboundPorts -}}
+    {{- $ports := splitList "," .Values.proxyInit.ignoreOutboundPorts -}}
     {{- if gt (len $ports) 1}}
     {{- $last := sub (len $ports) 1 -}}
     {{- range $i,$port := $ports -}}
@@ -48,34 +48,33 @@
     {{- end -}}
   ],
   "inboundPort":{
-    "port": {{.Proxy.Ports.Inbound}}
+    "port": {{.Values.proxy.ports.inbound}}
   },
   "adminPort":{
-    "port": {{.Proxy.Ports.Admin}}
+    "port": {{.Values.proxy.ports.admin}}
   },
   "outboundPort":{
-    "port": {{.Proxy.Ports.Outbound}}
+    "port": {{.Values.proxy.ports.outbound}}
   },
   "resource":{
-    "requestCpu": "{{.Proxy.Resources.CPU.Request}}",
-    "limitCpu": "{{.Proxy.Resources.CPU.Limit}}",
-    "requestMemory": "{{.Proxy.Resources.Memory.Request}}",
-    "limitMemory": "{{.Proxy.Resources.Memory.Limit}}"
+    "requestCpu": "{{.Values.proxy.resources.cpu.request}}",
+    "limitCpu": "{{.Values.proxy.resources.cpu.limit}}",
+    "requestMemory": "{{.Values.proxy.resources.memory.request}}",
+    "limitMemory": "{{.Values.proxy.resources.memory.limit}}"
   },
-  "proxyUid": {{.Proxy.UID}},
+  "proxyUid": {{.Values.proxy.uid}},
   "logLevel":{
-    "level": "{{.Proxy.LogLevel}}"
+    "level": "{{.Values.proxy.logLevel}}"
   },
-  "disableExternalProfiles": {{not .Proxy.EnableExternalProfiles}},
-  "proxyVersion": "{{.Proxy.Image.Version}}",
-  "proxyInitImageVersion": "{{.ProxyInit.Image.Version}}"
+  "disableExternalProfiles": {{not .Values.proxy.enableExternalProfiles}},
+  "proxyVersion": "{{.Values.proxy.image.version}}",
+  "proxyInitImageVersion": "{{.Values.proxyInit.image.version}}"
 }
 {{- end -}}
 
 {{- define "linkerd.configs.install" -}}
 {
-  "uuid":"{{ uuidv4 }}",
-  "cliVersion":"{{ .LinkerdVersion }}",
+  "cliVersion":"{{ .Values.linkerdVersion }}",
   "flags":[]
 }
 {{- end -}}

@@ -19,14 +19,26 @@ import { withStyles } from '@material-ui/core/styles';
 const styles = theme => ({
   root: {
     width: '100%',
-    marginTop: theme.spacing.unit * 3,
+    marginTop: theme.spacing(3),
     overflowX: 'auto',
   },
   expandedWrap: {
-    wordBreak: `break-word`
+    wordBreak: `break-word`,
+    paddingTop: "10px",
   },
   table: {
     minWidth: 700
+  },
+  tableHeader: {
+    fontSize: "12px",
+    opacity: 0.6,
+    lineHeight: 1,
+  },
+  denseTable: {
+    paddingRight: "8px",
+    "&:last-child": {
+      paddingRight: "24px",
+    },
   },
 });
 
@@ -61,17 +73,17 @@ class ExpandableTable extends React.Component {
     }].concat(tableColumns);
 
     return (
-      <Paper className={classes.root}>
+      <Paper className={classes.root} elevation={3}>
         <Table
-          className={`${classes.table} ${tableClassName}`}
-          padding="dense">
+          className={`${classes.table} ${tableClassName}`}>
           <TableHead>
             <TableRow>
               {
                 columns.map(c => (
                   <TableCell
                     key={c.key}
-                    numeric={c.isNumeric}>{c.title}
+                    className={`${classes.tableHeader} ${classes.denseTable}`}
+                    align={c.isNumeric ? "right" : "left"}>{c.title}
                   </TableCell>
                   )
                 )
@@ -94,7 +106,8 @@ class ExpandableTable extends React.Component {
                             columns.map(c => (
                               <TableCell
                                 key={`table-${d.key}-${c.key}`}
-                                numeric={c.isNumeric}>
+                                className={classes.denseTable}
+                                align={c.isNumeric ? "right" : "left"}>
                                 {c.render(d)}
                               </TableCell>
                             ))
@@ -115,6 +128,7 @@ class ExpandableTable extends React.Component {
 
         <Dialog
           maxWidth="md"
+          fullWidth
           open={this.state.open}
           onClose={this.handleDialogClose}
           aria-labelledby="form-dialog-title">

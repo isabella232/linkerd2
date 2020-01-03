@@ -68,6 +68,7 @@ var (
 		{"replicasets", "rs", true},
 		{"statefulsets", "sts", true},
 		{"jobs", "", true},
+		{"cronjobs", "cj", true},
 	}
 )
 
@@ -84,7 +85,7 @@ func initRouter(h *handler) *httprouter.Router {
 	router.GET("/metrics", handleMetrics)
 	router.GET("/openapi/v2", handleOpenAPI)
 	router.GET("/version", handleVersion)
-	router.NotFound = handleNotFound
+	router.NotFound = handleNotFound()
 
 	for _, res := range resources {
 		route := ""
@@ -179,8 +180,11 @@ func (h *handler) handleTap(w http.ResponseWriter, req *http.Request, p httprout
 }
 
 // GET (not found)
-func handleNotFound(w http.ResponseWriter, _ *http.Request) {
-	handlePaths(w, http.StatusNotFound)
+func handleNotFound() http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		handlePaths(w, http.StatusNotFound)
+	})
+
 }
 
 // GET /
@@ -314,6 +318,18 @@ func mkPathItem(desc string) spec.PathItem {
 					Description: desc,
 					Consumes:    []string{"application/json"},
 					Produces:    []string{"application/json"},
+					Responses: &spec.Responses{
+						ResponsesProps: spec.ResponsesProps{
+							StatusCodeResponses: map[int]spec.Response{
+								200: spec.Response{
+									Refable: spec.Refable{Ref: spec.MustCreateRef("n/a")},
+									ResponseProps: spec.ResponseProps{
+										Description: "OK response",
+									},
+								},
+							},
+						},
+					},
 				},
 			},
 		},

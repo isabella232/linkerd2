@@ -102,6 +102,17 @@ func TestUninjectAndInject(t *testing.T) {
 	noInitContainerConfig.Proxy.ProxyVersion = defaultConfig.Proxy.ProxyVersion
 	noInitContainerConfig.Global.CniEnabled = true
 
+	proxyIgnorePortsOptions, err := testInstallOptions()
+	if err != nil {
+		log.Fatalf("Unexpected error: %v", err)
+	}
+	proxyIgnorePortsOptions.ignoreInboundPorts = []string{"22", "8100-8102"}
+	proxyIgnorePortsOptions.ignoreOutboundPorts = []string{"5432"}
+	_, proxyIgnorePortsConfig, err := proxyIgnorePortsOptions.validateAndBuild("", nil)
+	if err != nil {
+		log.Fatalf("test install proxy-ignore options must be valid: %s", err)
+	}
+
 	testCases := []testCase{
 		{
 			inputFileName:    "inject_emojivoto_deployment.input.yml",
@@ -162,6 +173,13 @@ func TestUninjectAndInject(t *testing.T) {
 			inputFileName:    "inject_emojivoto_deployment_hostNetwork_true.input.yml",
 			goldenFileName:   "inject_emojivoto_deployment_hostNetwork_true.input.yml",
 			reportFileName:   "inject_emojivoto_deployment_hostNetwork_true.report",
+			injectProxy:      true,
+			testInjectConfig: defaultConfig,
+		},
+		{
+			inputFileName:    "inject_emojivoto_deployment_capabilities.input.yml",
+			goldenFileName:   "inject_emojivoto_deployment_capabilities.golden.yml",
+			reportFileName:   "inject_emojivoto_deployment.report",
 			injectProxy:      true,
 			testInjectConfig: defaultConfig,
 		},
@@ -265,6 +283,14 @@ func TestUninjectAndInject(t *testing.T) {
 			enableDebugSidecarFlag: true,
 		},
 		{
+			inputFileName:          "inject_tap_deployment.input.yml",
+			goldenFileName:         "inject_tap_deployment_debug.golden.yml",
+			reportFileName:         "inject_tap_deployment_debug.report",
+			injectProxy:            true,
+			testInjectConfig:       defaultConfig,
+			enableDebugSidecarFlag: true,
+		},
+		{
 			inputFileName:    "inject_emojivoto_namespace_good.input.yml",
 			goldenFileName:   "inject_emojivoto_namespace_good.golden.yml",
 			reportFileName:   "inject_emojivoto_namespace_good.golden.report",
@@ -281,6 +307,20 @@ func TestUninjectAndInject(t *testing.T) {
 				k8s.IdentityModeAnnotation: "default",
 				k8s.CreatedByAnnotation:    "linkerd/cli dev-undefined",
 			},
+		},
+		{
+			inputFileName:    "inject_emojivoto_deployment.input.yml",
+			goldenFileName:   "inject_emojivoto_deployment_proxyignores.golden.yml",
+			reportFileName:   "inject_emojivoto_deployment.report",
+			injectProxy:      true,
+			testInjectConfig: proxyIgnorePortsConfig,
+		},
+		{
+			inputFileName:    "inject_emojivoto_pod.input.yml",
+			goldenFileName:   "inject_emojivoto_pod_proxyignores.golden.yml",
+			reportFileName:   "inject_emojivoto_pod.report",
+			injectProxy:      true,
+			testInjectConfig: proxyIgnorePortsConfig,
 		},
 	}
 
@@ -344,7 +384,7 @@ func TestRunInjectCmd(t *testing.T) {
 			injectProxy:          true,
 		},
 		{
-			inputFileName:        "inject_tap_deployment.bad.input.yml",
+			inputFileName:        "inject_tap_deployment.input.yml",
 			stdErrGoldenFileName: "inject_tap_deployment.bad.golden",
 			exitCode:             1,
 			injectProxy:          false,

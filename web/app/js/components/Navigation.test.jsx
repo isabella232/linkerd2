@@ -1,10 +1,21 @@
 import ApiHelpers from './util/ApiHelpers.jsx';
 import { BrowserRouter } from 'react-router-dom';
 import React from 'react';
+import mediaQuery from 'css-mediaquery';
+import Menu from '@material-ui/core/Menu';
+import MenuItem from '@material-ui/core/MenuItem';
 import Navigation from './Navigation.jsx';
 import sinon from 'sinon';
 import sinonStubPromise from 'sinon-stub-promise';
 import { mount } from 'enzyme';
+
+function createMatchMedia(width) {
+  return query => ({
+    matches: mediaQuery.match(query, { width }),
+    addListener: () => {},
+    removeListener: () => {},
+  });
+}
 
 sinonStubPromise(sinon);
 
@@ -15,6 +26,11 @@ const loc = {
   search: '',
 };
 
+const namespaces = [
+  {key: "-namespace-default", name: "default", namespace: "", type: "namespace"},
+  {key: "-namespace-emojivoto", name: "emojivoto", namespace: "", type: "namespace"},
+  {key: "-namespace-linkerd", name: "linkerd", namespace: "", type: "namespace"},
+];
 
 describe('Navigation', () => {
   let curVer = "edge-1.2.3";
@@ -38,7 +54,7 @@ describe('Navigation', () => {
     window.fetch.restore();
   });
 
-  it('renders up to date message when versions match', () => {
+  it('checks state when versions match', () => {
     fetchStub.resolves({
       ok: true,
       json: () => Promise.resolve({ edge: curVer })
@@ -60,11 +76,12 @@ describe('Navigation', () => {
     );
 
     return withPromise(() => {
-      expect(component).toIncludeText("Linkerd is up to date");
+      expect(component.find("NavigationBase").state("isLatest")).toBeTruthy();
+      expect(component.find("NavigationBase").state("latestVersion")).toBe(curVer);
     });
   });
 
-  it('renders update message when versions do not match', () => {
+  it('checks state when versions do not match', () => {
     fetchStub.resolves({
       ok: true,
       json: () => Promise.resolve({ edge: newVer })
@@ -86,11 +103,12 @@ describe('Navigation', () => {
     );
 
     return withPromise(() => {
-      expect(component).toIncludeText("A new version (2.3.4) is available.");
+      expect(component.find("NavigationBase").state("isLatest")).toBeFalsy();
+      expect(component.find("NavigationBase").state("latestVersion")).toBe(newVer);
     });
   });
 
-  it('renders error when version check fails', () => {
+  it('checks state when version check fails', () => {
     let errMsg = "Fake error";
 
     fetchStub.rejects({
@@ -117,8 +135,55 @@ describe('Navigation', () => {
     );
 
     return withPromise(() => {
-      expect(component).toIncludeText("Version check failed: Fake error.");
-      expect(component).toIncludeText(errMsg);
+      expect(component.find("NavigationBase").state("error")).toBeDefined();
+      expect(component.find("NavigationBase").state("error").statusText).toBe("Fake error");
     });
+  });
+});
+
+describe('Namespace Select Button', () => {
+  beforeEach(() => {
+    // https://material-ui.com/components/use-media-query/#testing
+    window.matchMedia = createMatchMedia(window.innerWidth);
+  });
+
+  it('displays All Namespaces as button text if the selected namespace is _all', () => {
+    const component = mount(
+      <BrowserRouter>
+        <Navigation
+          ChildComponent={() => null}
+          classes={{}}
+          theme={{}}
+          location={loc}
+          api={ApiHelpers("")}
+          releaseVersion="edge-1.2.3"
+          selectedNamespace="_all"
+          pathPrefix=""
+          uuid="fakeuuid" />
+      </BrowserRouter>
+    );
+
+    const input = component.find("input");
+    expect(input.instance().value).toEqual("ALL NAMESPACES")
+  });
+
+  it('renders emojivoto text', () => {
+    const component = mount(
+      <BrowserRouter>
+        <Navigation
+          ChildComponent={() => null}
+          classes={{}}
+          theme={{}}
+          location={loc}
+          api={ApiHelpers("")}
+          releaseVersion="edge-1.2.3"
+          selectedNamespace="emojivoto"
+          pathPrefix=""
+          uuid="fakeuuid" />
+      </BrowserRouter>
+    );
+
+    const input = component.find("input");
+    expect(input.instance().value).toEqual("EMOJIVOTO")
   });
 });

@@ -58,6 +58,10 @@ const (
 	// StatefulSet that this proxy belongs to.
 	ProxyStatefulSetLabel = Prefix + "/proxy-statefulset"
 
+	// ProxyCronJobLabel is injected into mesh-enabled apps, identifying the
+	// CronJob that this proxy belongs to.
+	ProxyCronJobLabel = Prefix + "/proxy-cronjob"
+
 	/*
 	 * Annotations
 	 */
@@ -97,6 +101,9 @@ const (
 
 	// ProxyConfigAnnotationsPrefix is the prefix of all config-related annotations
 	ProxyConfigAnnotationsPrefix = "config.linkerd.io"
+
+	// ProxyConfigAnnotationsPrefixAlpha is the prefix of newly released config-related annotations
+	ProxyConfigAnnotationsPrefixAlpha = "config.alpha.linkerd.io"
 
 	// ProxyImageAnnotation can be used to override the proxyImage config.
 	ProxyImageAnnotation = ProxyConfigAnnotationsPrefix + "/proxy-image"
@@ -174,10 +181,15 @@ const (
 	// its value.
 	ProxyTraceCollectorSvcAddrAnnotation = ProxyConfigAnnotationsPrefix + "/trace-collector"
 
+	// ProxyWaitBeforeExitSecondsAnnotation makes the proxy container to wait for the given period before exiting
+	// after the Pod entered the Terminating state. Must be smaller than terminationGracePeriodSeconds
+	// configured for the Pod
+	ProxyWaitBeforeExitSecondsAnnotation = ProxyConfigAnnotationsPrefixAlpha + "/proxy-wait-before-exit-seconds"
+
 	// ProxyTraceCollectorSvcAccountAnnotation is used to specify the service account
 	// associated with the trace collector. It is used to create the service's
 	// mTLS identity.
-	ProxyTraceCollectorSvcAccountAnnotation = "config.alpha.linkerd.io/trace-collector-service-account"
+	ProxyTraceCollectorSvcAccountAnnotation = ProxyConfigAnnotationsPrefixAlpha + "/trace-collector-service-account"
 
 	// IdentityModeDefault is assigned to IdentityModeAnnotation to
 	// use the control plane's default identity scheme.

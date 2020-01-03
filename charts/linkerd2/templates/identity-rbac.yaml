@@ -1,5 +1,4 @@
-{{with .Values -}}
-{{if .Identity -}}
+{{if .Values.identity -}}
 ---
 ###
 ### Identity Controller Service RBAC
@@ -8,15 +7,15 @@
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: linkerd-{{.Namespace}}-identity
+  name: linkerd-{{.Values.namespace}}-identity
   labels:
-    {{.ControllerComponentLabel}}: identity
-    {{.ControllerNamespaceLabel}}: {{.Namespace}}
+    {{.Values.controllerComponentLabel}}: identity
+    {{.Values.controllerNamespaceLabel}}: {{.Values.namespace}}
 rules:
 - apiGroups: ["authentication.k8s.io"]
   resources: ["tokenreviews"]
   verbs: ["create"]
-- apiGroups: ["extensions"]
+- apiGroups: ["apps"]
   resources: ["deployments"]
   verbs: ["get"]
 - apiGroups: [""]
@@ -26,26 +25,25 @@ rules:
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
-  name: linkerd-{{.Namespace}}-identity
+  name: linkerd-{{.Values.namespace}}-identity
   labels:
-    {{.ControllerComponentLabel}}: identity
-    {{.ControllerNamespaceLabel}}: {{.Namespace}}
+    {{.Values.controllerComponentLabel}}: identity
+    {{.Values.controllerNamespaceLabel}}: {{.Values.namespace}}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: linkerd-{{.Namespace}}-identity
+  name: linkerd-{{.Values.namespace}}-identity
 subjects:
 - kind: ServiceAccount
   name: linkerd-identity
-  namespace: {{.Namespace}}
+  namespace: {{.Values.namespace}}
 ---
 kind: ServiceAccount
 apiVersion: v1
 metadata:
   name: linkerd-identity
-  namespace: {{.Namespace}}
+  namespace: {{.Values.namespace}}
   labels:
-    {{.ControllerComponentLabel}}: identity
-    {{.ControllerNamespaceLabel}}: {{.Namespace}}
-{{ end -}}
+    {{.Values.controllerComponentLabel}}: identity
+    {{.Values.controllerNamespaceLabel}}: {{.Values.namespace}}
 {{ end -}}
